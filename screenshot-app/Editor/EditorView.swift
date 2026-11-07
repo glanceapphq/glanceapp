@@ -210,6 +210,11 @@ private struct EditorInspector: View {
             }
 
             Spacer()
+
+            Button("Reset to Defaults", action: model.resetStyle)
+                .controlSize(.small)
+                .disabled(model.hasDefaultStyle)
+                .help("Restore default background, padding, corner radius and arrow color")
         }
         .padding(16)
     }

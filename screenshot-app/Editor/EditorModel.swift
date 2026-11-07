@@ -9,12 +9,13 @@ final class EditorModel {
 
     let screenshot: Screenshot
 
-    var padding: CGFloat = 48
-    var cornerRadius: CGFloat = 8
-    var background: CanvasBackground = .violet
+    // Styling is remembered between screenshots (see `EditorPreferences`).
+    var padding: CGFloat { didSet { savePreferences() } }
+    var cornerRadius: CGFloat { didSet { savePreferences() } }
+    var background: CanvasBackground { didSet { savePreferences() } }
+    var annotationColor: AnnotationColor { didSet { savePreferences() } }
 
     var activeTool: EditorTool? = .arrow
-    var annotationColor: AnnotationColor = .red
 
     /// Committed annotations, in drawing order.
     private(set) var annotations: [ArrowAnnotation] = []
@@ -27,8 +28,31 @@ final class EditorModel {
     /// Incremented to ask the canvas to fit itself into the visible area.
     private(set) var zoomToFitRequest = 0
 
-    init(screenshot: Screenshot) {
+    init(screenshot: Screenshot, preferences: EditorPreferences = .load()) {
         self.screenshot = screenshot
+        self.padding = preferences.padding
+        self.cornerRadius = preferences.cornerRadius
+        self.background = preferences.background
+        self.annotationColor = preferences.annotationColor
+    }
+
+    var preferences: EditorPreferences {
+        EditorPreferences(padding: padding, cornerRadius: cornerRadius, background: background, annotationColor: annotationColor)
+    }
+
+    var hasDefaultStyle: Bool { preferences == .defaults }
+
+    /// Restores default styling (and saves it as the new preference).
+    func resetStyle() {
+        let defaults = EditorPreferences.defaults
+        padding = defaults.padding
+        cornerRadius = defaults.cornerRadius
+        background = defaults.background
+        annotationColor = defaults.annotationColor
+    }
+
+    private func savePreferences() {
+        preferences.save()
     }
 
     /// Size of the full composition (screenshot + padding) in points.
@@ -94,7 +118,7 @@ final class EditorModel {
     }
 
     private func setZoom(_ value: CGFloat) {
-        zoom = min(max(value, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
+        zoom = value.clamped(to: Self.zoomRange)
     }
 }
 
