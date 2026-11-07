@@ -5,6 +5,7 @@ final class StatusBarController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onCapture: (CaptureMode) -> Void
     private let onOpenSettings: () -> Void
+    private var captureItems: [CaptureMode: NSMenuItem] = [:]
 
     init(onCapture: @escaping (CaptureMode) -> Void, onOpenSettings: @escaping () -> Void) {
         self.onCapture = onCapture
@@ -22,18 +23,26 @@ final class StatusBarController: NSObject {
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
+    /// Shows the current shortcuts next to the capture items.
+    func updateHotKeys(_ hotKeys: [CaptureMode: HotKey]) {
+        for (mode, item) in captureItems {
+            item.keyEquivalent = hotKeys[mode]?.menuKeyEquivalent ?? ""
+            item.keyEquivalentModifierMask = hotKeys[mode]?.modifiers ?? []
+        }
+    }
+
     // MARK: - Private
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
         for mode in CaptureMode.allCases {
-            let hotKey = mode.defaultHotKey
-            let item = NSMenuItem(title: mode.title, action: #selector(captureSelected(_:)), keyEquivalent: hotKey.key)
-            item.keyEquivalentModifierMask = hotKey.modifiers
+            // Key equivalents are filled in by `updateHotKeys(_:)` once shortcuts are registered.
+            let item = NSMenuItem(title: mode.title, action: #selector(captureSelected(_:)), keyEquivalent: "")
             item.tag = Int(mode.rawValue)
             item.target = self
             menu.addItem(item)
+            captureItems[mode] = item
         }
 
         menu.addItem(.separator())

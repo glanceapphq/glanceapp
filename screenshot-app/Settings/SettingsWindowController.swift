@@ -8,11 +8,13 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let appState: AppState
     private let permissions: PermissionService
+    private let shortcutActions: ShortcutActions
     private var window: NSWindow?
 
-    init(appState: AppState, permissions: PermissionService) {
+    init(appState: AppState, permissions: PermissionService, shortcutActions: ShortcutActions) {
         self.appState = appState
         self.permissions = permissions
+        self.shortcutActions = shortcutActions
     }
 
     func show() {
@@ -31,7 +33,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     // MARK: - Private
 
     private func makeWindow() -> NSWindow {
-        let hostingController = NSHostingController(rootView: SettingsView(appState: appState, permissions: permissions))
+        let hostingController = NSHostingController(rootView: SettingsView(appState: appState, permissions: permissions, shortcutActions: shortcutActions))
         hostingController.sizingOptions = [.preferredContentSize]
 
         let window = NSWindow(contentViewController: hostingController)

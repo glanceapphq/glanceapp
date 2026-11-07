@@ -5,7 +5,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
     private let permissions = PermissionService()
     private lazy var captureCoordinator = CaptureCoordinator(permissions: permissions)
-    private lazy var settingsWindow = SettingsWindowController(appState: appState, permissions: permissions)
+    private lazy var settingsWindow = SettingsWindowController(
+        appState: appState,
+        permissions: permissions,
+        shortcutActions: ShortcutActions(
+            change: { [weak self] hotKey, mode in self?.changeHotKey(hotKey, for: mode) },
+            setRecording: { [weak self] isRecording in self?.setHotKeysSuspended(isRecording) }
+        )
+    )
 
     private var statusBar: StatusBarController?
     private var hotKeys: HotKeyService?
@@ -28,16 +35,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Private
 
     private func registerHotKeys() {
-        let hotKeys = HotKeyService { [weak self] id in
+        hotKeys = HotKeyService { [weak self] id in
             guard let mode = CaptureMode(rawValue: id) else { return }
             // Leave the Carbon event handler before doing any UI work (alerts, overlays).
             Task { self?.capture(mode) }
         }
+        applyHotKeys()
+    }
+
+    /// Registers the saved shortcuts and updates the state and menu that display them.
+    private func applyHotKeys() {
+        guard let hotKeys else { return }
 
         for mode in CaptureMode.allCases {
-            appState.unavailableHotKeys[mode] = hotKeys.register(mode.defaultHotKey, id: mode.rawValue) ? nil : true
+            let hotKey = HotKeySettings.hotKey(for: mode)
+            appState.hotKeys[mode] = hotKey
+            appState.unavailableHotKeys[mode] = hotKeys.register(hotKey, id: mode.rawValue) ? nil : true
         }
-        self.hotKeys = hotKeys
+        statusBar?.updateHotKeys(appState.hotKeys)
+    }
+
+    /// Saves a new shortcut for `mode` (`nil` restores the default).
+    /// - Returns: An error message if the shortcut can't be used.
+    private func changeHotKey(_ hotKey: HotKey?, for mode: CaptureMode) -> String? {
+        let newHotKey = hotKey ?? mode.defaultHotKey
+        if let other = CaptureMode.allCases.first(where: { $0 != mode && HotKeySettings.hotKey(for: $0) == newHotKey }) {
+            return "Already used for \(other.title)."
+        }
+
+        HotKeySettings.setHotKey(hotKey, for: mode)
+        applyHotKeys()
+        return nil
+    }
+
+    /// Pauses global hot keys while a new shortcut is being recorded, so pressing an
+    /// existing one records it instead of starting a capture.
+    private func setHotKeysSuspended(_ suspended: Bool) {
+        if suspended {
+            CaptureMode.allCases.forEach { hotKeys?.unregister(id: $0.rawValue) }
+        } else {
+            applyHotKeys()
+        }
     }
 
     private func capture(_ mode: CaptureMode) {

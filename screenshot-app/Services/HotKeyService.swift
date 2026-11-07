@@ -16,8 +16,50 @@ struct HotKey: Equatable {
         if modifiers.contains(.option) { result += "⌥" }
         if modifiers.contains(.shift) { result += "⇧" }
         if modifiers.contains(.command) { result += "⌘" }
-        return result + key.uppercased()
+        return result + (key.count == 1 ? key.uppercased() : key)
     }
+
+    /// Modifiers a shortcut can use; others (Caps Lock, Fn, …) are ignored.
+    static let relevantModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+
+    init(keyCode: UInt32, key: String, modifiers: NSEvent.ModifierFlags) {
+        self.keyCode = keyCode
+        self.key = key
+        self.modifiers = modifiers.intersection(Self.relevantModifiers)
+    }
+
+    /// Builds a shortcut from a key press, or returns `nil` if it isn't a usable global shortcut:
+    /// it needs ⌘, ⌃ or ⌥ (Shift alone would block normal typing), except for function keys.
+    init?(event: NSEvent) {
+        let keyCode = Int(event.keyCode)
+        let modifiers = event.modifierFlags.intersection(Self.relevantModifiers)
+        let isFunctionKey = Self.functionKeyNames[keyCode] != nil
+        guard isFunctionKey || !modifiers.isDisjoint(with: [.command, .option, .control]) else { return nil }
+
+        // `characters(byApplyingModifiers: [])` gives "1" for ⇧1, where `charactersIgnoringModifiers` gives "!".
+        guard let key = Self.functionKeyNames[keyCode] ?? Self.specialKeyNames[keyCode]
+            ?? event.characters(byApplyingModifiers: [])?.uppercased(),
+            !key.isEmpty
+        else { return nil }
+
+        self.init(keyCode: UInt32(keyCode), key: key, modifiers: modifiers)
+    }
+
+    /// Key equivalent for menu items, or empty when the key can't be shown as a single character.
+    var menuKeyEquivalent: String {
+        key.count == 1 ? key.lowercased() : ""
+    }
+
+    private static let functionKeyNames: [Int: String] = [
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5", kVK_F6: "F6",
+        kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
+    ]
+
+    private static let specialKeyNames: [Int: String] = [
+        kVK_Space: "Space", kVK_Return: "↩", kVK_Tab: "⇥", kVK_Delete: "⌫", kVK_ForwardDelete: "⌦",
+        kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_UpArrow: "↑", kVK_DownArrow: "↓",
+        kVK_Home: "↖", kVK_End: "↘", kVK_PageUp: "⇞", kVK_PageDown: "⇟",
+    ]
 
     fileprivate var carbonModifiers: UInt32 {
         var result: UInt32 = 0
