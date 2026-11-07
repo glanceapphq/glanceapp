@@ -28,6 +28,26 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.invalidateShadow()
     }
 
+    /// User-initiated close: asks before discarding annotations.
+    func requestClose() {
+        guard model.hasAnnotations, let window else {
+            close()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Discard this screenshot?"
+        alert.informativeText = "Your annotations haven't been copied or saved."
+        alert.addButton(withTitle: "Discard")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.beginSheetModal(for: window) { [weak self] response in
+            if response == .alertFirstButtonReturn {
+                self?.close()
+            }
+        }
+    }
+
     func close() {
         window?.close()
     }
@@ -103,7 +123,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         background.maskImage = .roundedRectMask(cornerRadius: EditorView.cornerRadius)
 
         let actions = EditorActions(
-            close: { [weak self] in self?.close() },
+            close: { [weak self] in self?.requestClose() },
             copy: { [weak self] in self?.copy() },
             save: { [weak self] in self?.save() }
         )

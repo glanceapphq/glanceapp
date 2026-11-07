@@ -26,13 +26,17 @@ struct EditorView: View {
                     canvasSize: model.canvasSize,
                     zoom: $model.zoom,
                     zoomToFitRequest: model.zoomToFitRequest,
-                    cursor: model.activeTool?.cursor,
+                    // Always capture the mouse so annotations can be selected even without a tool.
+                    cursor: model.activeTool?.cursor ?? .arrow,
                     onDrag: model.handleCanvasDrag,
                     textField: model.textFieldRequest,
                     textColor: NSColor(model.annotationColor.color),
                     onTextCommit: model.commitText
                 ) {
                     CompositionView(model: model)
+                        .overlay(alignment: .topLeading) {
+                            SelectionFrame(model: model)
+                        }
                 }
                 Divider()
                 EditorInspector(model: model)
@@ -56,8 +60,16 @@ private struct EditorToolbar: View {
             Button(action: actions.close) {
                 Image(systemName: "xmark")
             }
-            .keyboardShortcut(unlessEditingText(.cancelAction))
-            .help("Close (Esc)")
+            .keyboardShortcut(unlessEditingText(KeyboardShortcut("w", modifiers: .command)))
+            .help("Close (⌘W)")
+            // Esc only clears the selection. It deliberately never closes the editor,
+            // so a stray key press can't throw away work.
+            .background {
+                Button("Deselect", action: model.clearSelection)
+                    .keyboardShortcut(unlessEditingText(.cancelAction))
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
 
             Divider().frame(height: 20)
 
@@ -74,7 +86,7 @@ private struct EditorToolbar: View {
             HStack(spacing: 6) {
                 ForEach(AnnotationColor.allCases) { color in
                     ColorDot(color: color, isSelected: model.annotationColor == color) {
-                        model.annotationColor = color
+                        model.selectColor(color)
                     }
                 }
             }
@@ -94,6 +106,13 @@ private struct EditorToolbar: View {
             .keyboardShortcut(unlessEditingText(KeyboardShortcut("z", modifiers: [.command, .shift])))
             .disabled(!model.canRedo)
             .help("Redo (⇧⌘Z)")
+
+            Button(action: model.deleteSelection) {
+                Image(systemName: "trash")
+            }
+            .keyboardShortcut(unlessEditingText(KeyboardShortcut(.delete, modifiers: [])))
+            .disabled(!model.hasSelection)
+            .help("Delete Selected Annotation (⌫)")
 
             Spacer()
 
@@ -164,6 +183,27 @@ private extension EditorTool {
         switch self {
         case .text: .iBeam
         case .arrow, .rectangle, .counter, .pixelate: .crosshair
+        }
+    }
+}
+
+/// Dashed frame around the selected annotation. Editor-only: not part of `CompositionView`, so never exported.
+private struct SelectionFrame: View {
+    let model: EditorModel
+
+    var body: some View {
+        if let annotation = model.selectedAnnotation {
+            // Keep the frame's line weight constant on screen at any zoom.
+            let scale = 1 / max(model.zoom, 0.01)
+            let rect = annotation.bounds
+                .insetBy(dx: -4 * scale, dy: -4 * scale)
+                .offsetBy(dx: model.padding, dy: model.padding)
+
+            Rectangle()
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5 * scale, dash: [4 * scale, 3 * scale]))
+                .frame(width: rect.width, height: rect.height)
+                .offset(x: rect.minX, y: rect.minY)
+                .allowsHitTesting(false)
         }
     }
 }

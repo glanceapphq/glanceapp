@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Annotation tools available in the editor.
@@ -177,6 +178,120 @@ nonisolated struct CounterAnnotation: Identifiable, Sendable {
 nonisolated struct PixelateAnnotation: Identifiable, Sendable {
     let id = UUID()
     var rect: CGRect
+}
+
+// MARK: - Editing geometry
+
+nonisolated extension Annotation {
+    /// Area the annotation covers, in screenshot space.
+    var bounds: CGRect {
+        switch self {
+        case .arrow(let arrow):
+            arrow.path.boundingRect
+        case .rectangle(let rectangle):
+            rectangle.rect.insetBy(dx: -rectangle.lineWidth / 2, dy: -rectangle.lineWidth / 2)
+        case .text(let text):
+            CGRect(origin: text.origin, size: text.size)
+        case .counter(let counter):
+            counter.circle.boundingRect
+        case .pixelate(let pixelate):
+            pixelate.rect
+        }
+    }
+
+    /// Whether `point` (screenshot space) hits the annotation.
+    ///
+    /// - Parameters:
+    ///   - tolerance: Extra slack around thin shapes, in points.
+    ///   - includeInterior: Whether the inside of outlined shapes (rectangle, pixelate) counts.
+    ///     When `false` only their edges do, so new annotations can be drawn inside them.
+    func contains(_ point: CGPoint, tolerance: CGFloat, includeInterior: Bool) -> Bool {
+        switch self {
+        case .arrow(let arrow):
+            return point.distance(toSegmentFrom: arrow.start, to: arrow.end) <= arrow.lineWidth / 2 + tolerance
+        case .rectangle(let rectangle):
+            return Self.outline(rectangle.rect, contains: point, halfWidth: rectangle.lineWidth / 2 + tolerance, includeInterior: includeInterior)
+        case .pixelate(let pixelate):
+            return Self.outline(pixelate.rect, contains: point, halfWidth: tolerance, includeInterior: includeInterior)
+        case .text, .counter:
+            return bounds.insetBy(dx: -tolerance, dy: -tolerance).contains(point)
+        }
+    }
+
+    /// The same annotation moved by `offset`.
+    func offset(by offset: CGSize) -> Annotation {
+        func move(_ point: CGPoint) -> CGPoint {
+            CGPoint(x: point.x + offset.width, y: point.y + offset.height)
+        }
+
+        switch self {
+        case .arrow(var arrow):
+            arrow.start = move(arrow.start)
+            arrow.end = move(arrow.end)
+            return .arrow(arrow)
+        case .rectangle(var rectangle):
+            rectangle.rect = rectangle.rect.offsetBy(dx: offset.width, dy: offset.height)
+            return .rectangle(rectangle)
+        case .text(var text):
+            text.origin = move(text.origin)
+            return .text(text)
+        case .counter(var counter):
+            counter.center = move(counter.center)
+            return .counter(counter)
+        case .pixelate(var pixelate):
+            pixelate.rect = pixelate.rect.offsetBy(dx: offset.width, dy: offset.height)
+            return .pixelate(pixelate)
+        }
+    }
+
+    /// The same annotation in `color`, or `nil` if it has no color (pixelate).
+    func recolored(_ color: AnnotationColor) -> Annotation? {
+        switch self {
+        case .arrow(var arrow):
+            arrow.color = color
+            return .arrow(arrow)
+        case .rectangle(var rectangle):
+            rectangle.color = color
+            return .rectangle(rectangle)
+        case .text(var text):
+            text.color = color
+            return .text(text)
+        case .counter(var counter):
+            counter.color = color
+            return .counter(counter)
+        case .pixelate:
+            return nil
+        }
+    }
+
+    private static func outline(_ rect: CGRect, contains point: CGPoint, halfWidth: CGFloat, includeInterior: Bool) -> Bool {
+        let outer = rect.insetBy(dx: -halfWidth, dy: -halfWidth)
+        guard outer.contains(point) else { return false }
+        if includeInterior { return true }
+        let inner = rect.insetBy(dx: halfWidth, dy: halfWidth)
+        return inner.isNull || !inner.contains(point)
+    }
+}
+
+nonisolated extension TextAnnotation {
+    /// Rendered size of the text (bold system font, matching `AnnotationLayer`).
+    var size: CGSize {
+        let font = NSFont.systemFont(ofSize: Self.fontSize, weight: .bold)
+        return (text as NSString).size(withAttributes: [.font: font])
+    }
+}
+
+nonisolated extension CGPoint {
+    /// Shortest distance from this point to the segment `a`–`b`.
+    func distance(toSegmentFrom a: CGPoint, to b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSquared = dx * dx + dy * dy
+        guard lengthSquared > 0 else { return hypot(x - a.x, y - a.y) }
+
+        let t = (((x - a.x) * dx + (y - a.y) * dy) / lengthSquared).clamped(to: 0...1)
+        return hypot(x - (a.x + t * dx), y - (a.y + t * dy))
+    }
 }
 
 extension CGRect {
