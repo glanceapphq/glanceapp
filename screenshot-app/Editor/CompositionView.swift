@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The final image: background, padding and the screenshot with rounded corners and a soft shadow.
+/// The final image: background, padding, the screenshot with rounded corners and a soft shadow, and annotations.
 ///
 /// Drawn at 1 point = 1 screenshot point. The editor shows it inside a zoomable
 /// scroll view, and export renders the very same view, so what you see is what you get.
@@ -20,5 +20,12 @@ struct CompositionView: View {
                     Rectangle().fill(style)
                 }
             }
+            .overlay {
+                AnnotationLayer(
+                    arrows: model.annotations + [model.draftArrow].compactMap { $0 },
+                    origin: CGPoint(x: model.padding, y: model.padding)
+                )
+            }
+            .clipped()
     }
 }

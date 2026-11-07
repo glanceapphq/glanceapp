@@ -13,6 +13,15 @@ final class EditorModel {
     var cornerRadius: CGFloat = 8
     var background: CanvasBackground = .violet
 
+    var activeTool: EditorTool? = .arrow
+    var annotationColor: AnnotationColor = .red
+
+    /// Committed annotations, in drawing order.
+    private(set) var annotations: [ArrowAnnotation] = []
+    /// The arrow currently being dragged out, not yet committed.
+    var draftArrow: ArrowAnnotation?
+    private var redoStack: [ArrowAnnotation] = []
+
     /// Canvas magnification; `1` shows the screenshot at its native point size.
     var zoom: CGFloat = 1
     /// Incremented to ask the canvas to fit itself into the visible area.
@@ -29,6 +38,28 @@ final class EditorModel {
             height: screenshot.size.height + padding * 2
         )
     }
+
+    // MARK: Annotations
+
+    var canUndo: Bool { !annotations.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    func addAnnotation(_ arrow: ArrowAnnotation) {
+        annotations.append(arrow)
+        redoStack.removeAll()
+    }
+
+    func undo() {
+        guard let last = annotations.popLast() else { return }
+        redoStack.append(last)
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        annotations.append(next)
+    }
+
+    // MARK: Zoom
 
     func zoomIn() { setZoom(zoom * 1.25) }
     func zoomOut() { setZoom(zoom / 1.25) }
@@ -81,7 +112,7 @@ enum CanvasBackground: String, CaseIterable, Identifiable {
 
 extension Color {
     /// Creates an sRGB color from a `0xRRGGBB` value.
-    init(hex: UInt32) {
+    nonisolated init(hex: UInt32) {
         self.init(
             .sRGB,
             red: Double((hex >> 16) & 0xFF) / 255,

@@ -19,7 +19,7 @@ struct EditorView: View {
                     zoom: $model.zoom,
                     zoomToFitRequest: model.zoomToFitRequest
                 ) {
-                    CompositionView(model: model)
+                    EditorCanvas(model: model)
                 }
                 Divider()
                 EditorInspector(model: model)
@@ -45,6 +45,39 @@ private struct EditorToolbar: View {
             }
             .keyboardShortcut(.cancelAction)
             .help("Close (Esc)")
+
+            Divider().frame(height: 20)
+
+            ToolButton(systemImage: "arrow.up.right", isSelected: model.activeTool == .arrow) {
+                model.activeTool = model.activeTool == .arrow ? nil : .arrow
+            }
+            .keyboardShortcut("a", modifiers: [])
+            .help("Arrow (A)")
+
+            HStack(spacing: 6) {
+                ForEach(AnnotationColor.allCases) { color in
+                    ColorDot(color: color, isSelected: model.annotationColor == color) {
+                        model.annotationColor = color
+                        model.activeTool = .arrow
+                    }
+                }
+            }
+
+            Divider().frame(height: 20)
+
+            Button(action: model.undo) {
+                Image(systemName: "arrow.uturn.backward")
+            }
+            .keyboardShortcut("z", modifiers: .command)
+            .disabled(!model.canUndo)
+            .help("Undo (⌘Z)")
+
+            Button(action: model.redo) {
+                Image(systemName: "arrow.uturn.forward")
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .disabled(!model.canRedo)
+            .help("Redo (⇧⌘Z)")
 
             Spacer()
 
@@ -85,6 +118,45 @@ private struct EditorToolbar: View {
                 .contentShape(.rect)
                 .gesture(WindowDragGesture())
         }
+    }
+}
+
+private struct ToolButton: View {
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .frame(width: 26, height: 26)
+                .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                .background(isSelected ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 6))
+                .contentShape(.rect)
+        }
+    }
+}
+
+private struct ColorDot: View {
+    let color: AnnotationColor
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(color.color)
+                .overlay { Circle().strokeBorder(.black.opacity(0.15)) }
+                .frame(width: 14, height: 14)
+                .padding(3)
+                .overlay {
+                    if isSelected {
+                        Circle().strokeBorder(Color.accentColor, lineWidth: 2)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .help(color.rawValue.capitalized)
     }
 }
 
