@@ -44,6 +44,28 @@ final class EditorModel {
     var canUndo: Bool { !annotations.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
 
+    /// Turns a drag on the canvas into a draft arrow, committing it when the drag ends.
+    func handleCanvasDrag(_ drag: CanvasDrag) {
+        guard activeTool == .arrow else { return }
+
+        switch drag {
+        case let .changed(start, location, isConstrained):
+            let start = toScreenshotSpace(start)
+            var end = toScreenshotSpace(location)
+            if isConstrained {
+                end = ArrowAnnotation.snappedEnd(from: start, to: end)
+            }
+            draftArrow = ArrowAnnotation(start: start, end: end, color: annotationColor)
+
+        case .ended:
+            // Ignore clicks and tiny accidental drags.
+            if let draftArrow, draftArrow.length >= 4 {
+                addAnnotation(draftArrow)
+            }
+            draftArrow = nil
+        }
+    }
+
     func addAnnotation(_ arrow: ArrowAnnotation) {
         annotations.append(arrow)
         redoStack.removeAll()
@@ -65,6 +87,11 @@ final class EditorModel {
     func zoomOut() { setZoom(zoom / 1.25) }
     func zoomToActualSize() { setZoom(1) }
     func zoomToFit() { zoomToFitRequest += 1 }
+
+    /// Canvas points → screenshot points (arrows are stored relative to the screenshot).
+    private func toScreenshotSpace(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x - padding, y: point.y - padding)
+    }
 
     private func setZoom(_ value: CGFloat) {
         zoom = min(max(value, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)

@@ -1,12 +1,25 @@
 import AppKit
 import SwiftUI
 
+/// A mouse drag on the canvas, in canvas coordinates (points, top-left origin).
+enum CanvasDrag {
+    case changed(start: CGPoint, location: CGPoint, isConstrained: Bool)
+    case ended
+}
+
 /// Hosts SwiftUI content in an `NSScrollView` to get native zoom and pan:
 /// pinch to zoom, two-finger scroll to pan, content centered when smaller than the view.
+///
+/// Mouse drags are handled by an AppKit view on top of the content rather than a
+/// SwiftUI gesture: SwiftUI reports wrong locations inside a magnified scroll view,
+/// while AppKit's coordinate conversion accounts for the magnification.
 struct CanvasScrollView<Content: View>: NSViewRepresentable {
     let canvasSize: CGSize
     @Binding var zoom: CGFloat
     let zoomToFitRequest: Int
+    /// Whether drags on the canvas are captured (and the cursor becomes a crosshair).
+    let isDrawingEnabled: Bool
+    let onDrag: (CanvasDrag) -> Void
     @ViewBuilder let content: Content
 
     func makeCoordinator() -> Coordinator {
@@ -24,12 +37,23 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
         scrollView.minMagnification = EditorModel.zoomRange.lowerBound
         scrollView.maxMagnification = EditorModel.zoomRange.upperBound
 
-        let documentView = NSHostingView(rootView: content)
+        let documentView = FlippedView(frame: CGRect(origin: .zero, size: canvasSize))
+
+        let hostingView = NSHostingView(rootView: content)
         // Size is driven by `canvasSize`, not by SwiftUI layout.
-        documentView.sizingOptions = []
-        documentView.frame = CGRect(origin: .zero, size: canvasSize)
+        hostingView.sizingOptions = []
+        hostingView.frame = documentView.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        documentView.addSubview(hostingView)
+
+        let inputView = CanvasInputView(frame: documentView.bounds)
+        inputView.autoresizingMask = [.width, .height]
+        documentView.addSubview(inputView)
+
         scrollView.documentView = documentView
 
+        context.coordinator.hostingView = hostingView
+        context.coordinator.inputView = inputView
         context.coordinator.attach(to: scrollView)
         return scrollView
     }
@@ -38,11 +62,12 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.zoom = $zoom
 
-        if let documentView = scrollView.documentView as? NSHostingView<Content> {
-            documentView.rootView = content
-            if documentView.frame.size != canvasSize {
-                documentView.setFrameSize(canvasSize)
-            }
+        coordinator.hostingView?.rootView = content
+        coordinator.inputView?.isDrawingEnabled = isDrawingEnabled
+        coordinator.inputView?.onDrag = onDrag
+
+        if let documentView = scrollView.documentView, documentView.frame.size != canvasSize {
+            documentView.setFrameSize(canvasSize)
         }
 
         if zoomToFitRequest != coordinator.zoomToFitRequest {
@@ -60,6 +85,8 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
     final class Coordinator {
         var zoom: Binding<CGFloat>
         var zoomToFitRequest: Int
+        var hostingView: NSHostingView<Content>?
+        var inputView: CanvasInputView?
         private weak var scrollView: NSScrollView?
         private var magnifyObserver: NSObjectProtocol?
 
@@ -89,6 +116,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(magnifyObserver)
                 self.magnifyObserver = nil
             }
+            inputView?.onDrag = nil
         }
 
         func setMagnification(_ value: CGFloat) {
@@ -115,6 +143,59 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
             Task { [zoom] in zoom.wrappedValue = magnification }
         }
     }
+}
+
+/// Transparent view over the canvas that turns mouse drags into `CanvasDrag` events.
+/// When drawing is disabled it ignores the mouse entirely, letting events pass through.
+final class CanvasInputView: NSView {
+    var isDrawingEnabled = false {
+        didSet {
+            guard isDrawingEnabled != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+    var onDrag: ((CanvasDrag) -> Void)?
+
+    private var dragStart: CGPoint?
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isDrawingEnabled ? super.hitTest(point) : nil
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func resetCursorRects() {
+        if isDrawingEnabled {
+            addCursorRect(bounds, cursor: .crosshair)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        dragStart = location(of: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragStart else { return }
+        onDrag?(.changed(start: dragStart, location: location(of: event), isConstrained: event.modifierFlags.contains(.shift)))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard dragStart != nil else { return }
+        dragStart = nil
+        onDrag?(.ended)
+    }
+
+    /// Event location in this view's coordinates, i.e. canvas points regardless of magnification.
+    private func location(of event: NSEvent) -> CGPoint {
+        convert(event.locationInWindow, from: nil)
+    }
+}
+
+/// Document view with a top-left origin, matching SwiftUI's coordinate space.
+private final class FlippedView: NSView {
+    override var isFlipped: Bool { true }
 }
 
 /// Clip view that keeps the document centered when it's smaller than the visible area.

@@ -1,5 +1,12 @@
 import SwiftUI
 
+/// Callbacks from the editor UI to its window controller.
+struct EditorActions {
+    let close: () -> Void
+    let copy: () -> Void
+    let save: () -> Void
+}
+
 /// Root view of the editor window: toolbar, zoomable canvas and inspector.
 struct EditorView: View {
     static let toolbarHeight: CGFloat = 44
@@ -7,19 +14,21 @@ struct EditorView: View {
     static let cornerRadius: CGFloat = 12
 
     @Bindable var model: EditorModel
-    let onClose: () -> Void
+    let actions: EditorActions
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorToolbar(model: model, onClose: onClose)
+            EditorToolbar(model: model, actions: actions)
             Divider()
             HStack(spacing: 0) {
                 CanvasScrollView(
                     canvasSize: model.canvasSize,
                     zoom: $model.zoom,
-                    zoomToFitRequest: model.zoomToFitRequest
+                    zoomToFitRequest: model.zoomToFitRequest,
+                    isDrawingEnabled: model.activeTool == .arrow,
+                    onDrag: model.handleCanvasDrag
                 ) {
-                    EditorCanvas(model: model)
+                    CompositionView(model: model)
                 }
                 Divider()
                 EditorInspector(model: model)
@@ -36,11 +45,11 @@ struct EditorView: View {
 
 private struct EditorToolbar: View {
     let model: EditorModel
-    let onClose: () -> Void
+    let actions: EditorActions
 
     var body: some View {
         HStack(spacing: 12) {
-            Button(action: onClose) {
+            Button(action: actions.close) {
                 Image(systemName: "xmark")
             }
             .keyboardShortcut(.cancelAction)
@@ -108,6 +117,21 @@ private struct EditorToolbar: View {
                 .keyboardShortcut("0", modifiers: .command)
                 .help("Zoom to Fit (⌘0)")
             }
+
+            Divider().frame(height: 20)
+
+            HStack(spacing: 8) {
+                Button("Copy", action: actions.copy)
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut("c", modifiers: .command)
+                    .help("Copy to Clipboard (⌘C)")
+
+                Button("Save", action: actions.save)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("s", modifiers: .command)
+                    .help("Save as PNG to \(SaveLocation.current.title) (⌘S)")
+            }
+            .controlSize(.small)
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)

@@ -4,8 +4,18 @@ struct SettingsView: View {
     let appState: AppState
     let permissions: PermissionService
 
+    @AppStorage(SaveLocation.defaultsKey) private var saveLocation: SaveLocation = .desktop
+
     var body: some View {
         Form {
+            Section("Export") {
+                Picker("Save screenshots to", selection: $saveLocation) {
+                    ForEach(SaveLocation.allCases) { location in
+                        Text(location.title).tag(location)
+                    }
+                }
+            }
+
             Section {
                 LabeledContent("Screen Recording") {
                     if appState.hasScreenRecordingPermission {

@@ -9,6 +9,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     var onClose: (() -> Void)?
 
     private let model: EditorModel
+    private let renderService = RenderService()
+    private let exportService = ExportService()
     private var window: NSWindow?
 
     init(screenshot: Screenshot) {
@@ -30,6 +32,16 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window?.close()
     }
 
+    /// Copies the rendered composition to the clipboard and closes the editor.
+    func copy() {
+        export { image in exportService.copyToPasteboard(image) }
+    }
+
+    /// Saves the rendered composition as PNG and closes the editor.
+    func save() {
+        export { image in try exportService.save(image) }
+    }
+
     func windowWillClose(_ notification: Notification) {
         window?.delegate = nil
         window?.contentView = nil
@@ -39,6 +51,27 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     }
 
     // MARK: - Private
+
+    /// Renders the composition and hands it to `deliver`. Closes on success; reports errors on the window.
+    private func export(_ deliver: (RenderedImage) throws -> Void) {
+        do {
+            try deliver(try renderService.render(model))
+            close()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func presentError(_ error: Error) {
+        let alert = NSAlert(error: error)
+        alert.messageText = "Export Failed"
+        alert.informativeText = error.localizedDescription
+        if let window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
 
     private func makeWindow(on screen: NSScreen?) -> NSWindow {
         let window = EditorWindow(
@@ -67,9 +100,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         background.state = .active
         background.maskImage = .roundedRectMask(cornerRadius: EditorView.cornerRadius)
 
-        let editor = NSHostingView(rootView: EditorView(model: model) { [weak self] in
-            self?.close()
-        })
+        let actions = EditorActions(
+            close: { [weak self] in self?.close() },
+            copy: { [weak self] in self?.copy() },
+            save: { [weak self] in self?.save() }
+        )
+        let editor = NSHostingView(rootView: EditorView(model: model, actions: actions))
         editor.frame = background.bounds
         editor.autoresizingMask = [.width, .height]
         background.addSubview(editor)
