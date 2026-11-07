@@ -4,13 +4,15 @@ import OSLog
 /// Entry point for capture requests coming from the menu bar or global hot keys.
 ///
 /// Gates requests behind the permission check, drives the selection overlay and
-/// hands the result off. Until the editor exists (Step 4), results go straight to the clipboard.
+/// opens each result in its own editor window.
 final class CaptureCoordinator {
     private let permissions: PermissionService
     private let captureService = CaptureService()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "screenshot-app", category: "Capture")
 
     private var selection: SelectionOverlayController?
+    /// Open editors, kept alive until their window closes.
+    private var editors: [ObjectIdentifier: EditorWindowController] = [:]
     /// Guards against overlapping captures (e.g. a hot key pressed during selection).
     private var isBusy = false
 
@@ -35,7 +37,7 @@ final class CaptureCoordinator {
             // so there's no need to wait for the window server to remove it.
             let excluded = Set([self.selection?.windowID].compactMap { $0 })
             Task {
-                await self.perform { try await self.captureService.captureRect(rect, on: screen, excludingWindowIDs: excluded) }
+                await self.perform(on: screen) { try await self.captureService.captureRect(rect, on: screen, excludingWindowIDs: excluded) }
             }
         }
     }
@@ -45,20 +47,22 @@ final class CaptureCoordinator {
         isBusy = true
 
         Task {
-            await perform { try await self.captureService.captureScreen(screen) }
+            await perform(on: screen) { try await self.captureService.captureScreen(screen) }
         }
     }
 
     // MARK: - Private
 
-    private func perform(_ capture: () async throws -> Screenshot) async {
-        defer { endCapture() }
+    /// Runs `capture` and opens the result in an editor on `screen`.
+    private func perform(on screen: NSScreen, _ capture: () async throws -> Screenshot) async {
         do {
             let screenshot = try await capture()
             logger.info("Captured \(screenshot.image.width)×\(screenshot.image.height) px")
-            deliver(screenshot)
+            endCapture()
+            openEditor(for: screenshot, on: screen)
         } catch {
             logger.error("Capture failed: \(error.localizedDescription)")
+            endCapture()
             presentError(error)
         }
     }
@@ -69,21 +73,12 @@ final class CaptureCoordinator {
         isBusy = false
     }
 
-    /// Temporary hand-off until the editor exists: copies the image to the clipboard as PNG.
-    private func deliver(_ screenshot: Screenshot) {
-        let item = NSPasteboardItem()
-        let bitmap = NSBitmapImageRep(cgImage: screenshot.image)
-        bitmap.size = screenshot.size
-        if let png = bitmap.representation(using: .png, properties: [:]) {
-            item.setData(png, forType: .png)
-        }
-        if let tiff = bitmap.tiffRepresentation {
-            item.setData(tiff, forType: .tiff)
-        }
-
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([item])
+    private func openEditor(for screenshot: Screenshot, on screen: NSScreen) {
+        let editor = EditorWindowController(screenshot: screenshot)
+        let id = ObjectIdentifier(editor)
+        editor.onClose = { [weak self] in self?.editors[id] = nil }
+        editors[id] = editor
+        editor.show(on: screen)
     }
 
     private func presentError(_ error: Error) {
