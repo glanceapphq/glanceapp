@@ -24,26 +24,15 @@ final class CaptureCoordinator {
         guard !isBusy, permissions.ensureScreenRecordingAccess(), let screen = NSScreen.underMouse else { return }
         isBusy = true
 
-        let selection = SelectionOverlayController(screen: screen)
-        self.selection = selection
         // Snapshot the window list before the overlay appears, so it isn't in the list.
-        selection.begin(windows: captureService.selectableWindows(on: screen)) { [weak self] result in
-            guard let self else { return }
-
-            switch result {
-            case .area(let rect):
-                // Keep the overlay up while capturing; it's excluded from the image,
-                // so there's no need to wait for the window server to remove it.
-                let excluded = Set([self.selection?.windowID].compactMap { $0 })
-                Task {
-                    await self.perform(on: screen) { try await self.captureService.captureRect(rect, on: screen, excludingWindowIDs: excluded) }
-                }
-            case .window(let windowID):
-                Task {
-                    await self.perform(on: screen) { try await self.captureService.captureWindow(windowID) }
-                }
-            case nil:
-                endCapture()
+        let windows = captureService.selectableWindows(on: screen)
+        Task {
+            do {
+                // Freeze the screen first: the overlay shows this image and areas are cut out of it.
+                let frozenScreen = try await captureService.captureScreen(screen)
+                beginSelection(on: screen, frozenScreen: frozenScreen, windows: windows)
+            } catch {
+                fail(with: error)
             }
         }
     }
@@ -59,6 +48,31 @@ final class CaptureCoordinator {
 
     // MARK: - Private
 
+    private func beginSelection(on screen: NSScreen, frozenScreen: Screenshot, windows: [SelectableWindow]) {
+        let selection = SelectionOverlayController(screen: screen)
+        self.selection = selection
+        selection.begin(frozenScreen: frozenScreen, windows: windows) { [weak self] result in
+            guard let self else { return }
+
+            switch result {
+            case .area(let rect):
+                Task {
+                    await self.perform(on: screen) {
+                        guard let cropped = frozenScreen.cropped(to: rect) else { throw CaptureError.cropFailed }
+                        return cropped
+                    }
+                }
+            case .window(let windowID):
+                // Captured live rather than cropped, so parts hidden behind other windows are included.
+                Task {
+                    await self.perform(on: screen) { try await self.captureService.captureWindow(windowID) }
+                }
+            case nil:
+                endCapture()
+            }
+        }
+    }
+
     /// Runs `capture` and opens the result in an editor on `screen`.
     private func perform(on screen: NSScreen, _ capture: () async throws -> Screenshot) async {
         do {
@@ -67,10 +81,14 @@ final class CaptureCoordinator {
             endCapture()
             openEditor(for: screenshot, on: screen)
         } catch {
-            logger.error("Capture failed: \(error.localizedDescription)")
-            endCapture()
-            presentError(error)
+            fail(with: error)
         }
+    }
+
+    private func fail(with error: Error) {
+        logger.error("Capture failed: \(error.localizedDescription)")
+        endCapture()
+        presentError(error)
     }
 
     private func endCapture() {

@@ -11,6 +11,12 @@ struct Screenshot {
     var size: CGSize {
         CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
     }
+
+    /// The part of the image inside `rect` (points, top-left origin), at the same scale.
+    func cropped(to rect: CGRect) -> Screenshot? {
+        let pixelRect = CGRect(x: rect.minX * scale, y: rect.minY * scale, width: rect.width * scale, height: rect.height * scale).integral
+        return image.cropping(to: pixelRect).map { Screenshot(image: $0, scale: scale) }
+    }
 }
 
 /// An on-screen window the user can pick in the selection overlay.
@@ -23,29 +29,42 @@ struct SelectableWindow {
 enum CaptureError: LocalizedError {
     case displayNotFound
     case windowNotFound
+    case cropFailed
 
     var errorDescription: String? {
         switch self {
         case .displayNotFound: "Could not find the display to capture."
         case .windowNotFound: "The window is no longer available."
+        case .cropFailed: "Could not cut out the selected area."
         }
     }
 }
 
 /// Takes still screenshots using ScreenCaptureKit.
 final class CaptureService {
-    /// Captures the whole `screen`.
-    func captureScreen(_ screen: NSScreen) async throws -> Screenshot {
-        try await capture(screen: screen, rect: nil, excludingWindowIDs: [])
-    }
-
-    /// Captures `rect` on `screen`.
+    /// Captures the whole `screen` at full resolution.
     ///
-    /// - Parameters:
-    ///   - rect: Area in the screen's local coordinate space (points, top-left origin).
-    ///   - excludedWindowIDs: Windows to leave out of the image, such as the selection overlay.
-    func captureRect(_ rect: CGRect, on screen: NSScreen, excludingWindowIDs excludedWindowIDs: Set<CGWindowID>) async throws -> Screenshot {
-        try await capture(screen: screen, rect: rect, excludingWindowIDs: excludedWindowIDs)
+    /// Area captures crop this image too: the selection overlay shows it "frozen"
+    /// and cuts the selected area out of it, so no second capture is needed.
+    func captureScreen(_ screen: NSScreen) async throws -> Screenshot {
+        guard let displayID = screen.displayID else { throw CaptureError.displayNotFound }
+
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+            throw CaptureError.displayNotFound
+        }
+
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let scale = CGFloat(filter.pointPixelScale)
+
+        let configuration = SCStreamConfiguration()
+        configuration.width = Int((filter.contentRect.width * scale).rounded())
+        configuration.height = Int((filter.contentRect.height * scale).rounded())
+        configuration.captureResolution = .best
+        configuration.showsCursor = false
+
+        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        return Screenshot(image: image, scale: scale)
     }
 
     /// Captures a single window on its own: no other windows or desktop behind it,
@@ -96,32 +115,6 @@ final class CaptureService {
 
             return SelectableWindow(id: id, frame: bounds.offsetBy(dx: -displayBounds.minX, dy: -displayBounds.minY))
         }
-    }
-
-    // MARK: - Private
-
-    private func capture(screen: NSScreen, rect: CGRect?, excludingWindowIDs excludedWindowIDs: Set<CGWindowID>) async throws -> Screenshot {
-        guard let displayID = screen.displayID else { throw CaptureError.displayNotFound }
-
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
-            throw CaptureError.displayNotFound
-        }
-
-        let excludedWindows = content.windows.filter { excludedWindowIDs.contains($0.windowID) }
-        let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
-        let scale = CGFloat(filter.pointPixelScale)
-        let sourceRect = rect ?? CGRect(origin: .zero, size: filter.contentRect.size)
-
-        let configuration = SCStreamConfiguration()
-        configuration.sourceRect = sourceRect
-        configuration.width = Int((sourceRect.width * scale).rounded())
-        configuration.height = Int((sourceRect.height * scale).rounded())
-        configuration.captureResolution = .best
-        configuration.showsCursor = false
-
-        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-        return Screenshot(image: image, scale: scale)
     }
 }
 

@@ -17,17 +17,15 @@ final class SelectionOverlayController {
         self.screen = screen
     }
 
-    /// Window server ID of the overlay, so it can be excluded from the capture.
-    var windowID: CGWindowID? {
-        window.map { CGWindowID($0.windowNumber) }
-    }
-
     /// Shows the overlay. `completion` is called once with the user's pick, or `nil` if they cancelled.
     ///
-    /// - Parameter windows: Windows that can be picked by clicking, frontmost first.
-    func begin(windows: [SelectableWindow], completion: @escaping (SelectionResult?) -> Void) {
+    /// - Parameters:
+    ///   - frozenScreen: Screenshot of this screen, shown as the overlay's background.
+    ///   - windows: Windows that can be picked by clicking, frontmost first.
+    func begin(frozenScreen: Screenshot, windows: [SelectableWindow], completion: @escaping (SelectionResult?) -> Void) {
         self.completion = completion
         model.windows = windows
+        model.screenSize = screen.frame.size
         // Highlight the window under the pointer right away, before the mouse moves.
         let mouse = NSEvent.mouseLocation
         model.hoverLocation = CGPoint(x: mouse.x - screen.frame.minX, y: screen.frame.maxY - mouse.y)
@@ -39,7 +37,7 @@ final class SelectionOverlayController {
         window.isOpaque = false
         window.hasShadow = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        window.contentView = OverlayHostingView(rootView: SelectionView(model: model) { [weak self] result in
+        window.contentView = OverlayHostingView(rootView: SelectionView(model: model, frozenScreen: frozenScreen) { [weak self] result in
             self?.finish(with: result)
         })
         window.setFrame(screen.frame, display: false)
