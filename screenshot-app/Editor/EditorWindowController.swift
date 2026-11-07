@@ -54,6 +54,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
 
     /// Renders the composition and hands it to `deliver`. Closes on success; reports errors on the window.
     private func export(_ deliver: (RenderedImage) throws -> Void) {
+        // End text editing first so text still being typed is committed and included.
+        window?.makeFirstResponder(nil)
         do {
             try deliver(try renderService.render(model))
             close()
@@ -85,7 +87,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = true
-        window.minSize = CGSize(width: 640, height: 400)
+        window.minSize = CGSize(width: 860, height: 400)
         window.collectionBehavior = [.fullScreenAuxiliary]
         window.delegate = self
         window.contentView = makeContentView()
@@ -118,7 +120,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let canvas = model.canvasSize
         let margin: CGFloat = 40
 
-        let width = min(max(canvas.width + EditorView.inspectorWidth + margin, 720), visible.width * 0.85)
+        let width = min(max(canvas.width + EditorView.inspectorWidth + margin, 900), visible.width * 0.85)
         let height = min(max(canvas.height + EditorView.toolbarHeight + margin, 480), visible.height * 0.85)
 
         return CGRect(

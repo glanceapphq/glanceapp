@@ -1,8 +1,37 @@
 import SwiftUI
 
 /// Annotation tools available in the editor.
-enum EditorTool {
+enum EditorTool: String, CaseIterable, Identifiable {
     case arrow
+    case rectangle
+    case text
+    case counter
+    case pixelate
+
+    var id: String { rawValue }
+
+    var title: String { rawValue.capitalized }
+
+    var systemImage: String {
+        switch self {
+        case .arrow: "arrow.up.right"
+        case .rectangle: "rectangle"
+        case .text: "textformat"
+        case .counter: "1.circle"
+        case .pixelate: "checkerboard.rectangle"
+        }
+    }
+
+    /// Single-key shortcut that selects the tool.
+    var shortcutKey: Character {
+        switch self {
+        case .arrow: "a"
+        case .rectangle: "r"
+        case .text: "t"
+        case .counter: "n"
+        case .pixelate: "p"
+        }
+    }
 }
 
 /// Colors offered for annotations.
@@ -21,10 +50,41 @@ nonisolated enum AnnotationColor: String, CaseIterable, Identifiable, Sendable {
         case .white: .white
         }
     }
+
+    /// Readable color for text drawn on top of this color.
+    var contrastingColor: Color {
+        switch self {
+        case .yellow, .white: .black
+        default: .white
+        }
+    }
 }
 
-/// A vector arrow in screenshot coordinates (points, origin at the screenshot's top-left),
-/// so it stays attached to the same content when padding changes.
+// MARK: - Annotation types
+
+/// Everything that can be drawn on a screenshot.
+///
+/// All geometry is in screenshot coordinates (points, origin at the screenshot's
+/// top-left), so annotations stay attached to the same content when padding changes.
+nonisolated enum Annotation: Identifiable, Sendable {
+    case arrow(ArrowAnnotation)
+    case rectangle(RectangleAnnotation)
+    case text(TextAnnotation)
+    case counter(CounterAnnotation)
+    case pixelate(PixelateAnnotation)
+
+    var id: UUID {
+        switch self {
+        case .arrow(let arrow): arrow.id
+        case .rectangle(let rectangle): rectangle.id
+        case .text(let text): text.id
+        case .counter(let counter): counter.id
+        case .pixelate(let pixelate): pixelate.id
+        }
+    }
+}
+
+/// A vector arrow from `start` to `end`.
 nonisolated struct ArrowAnnotation: Identifiable, Sendable {
     let id = UUID()
     var start: CGPoint
@@ -76,9 +136,68 @@ nonisolated struct ArrowAnnotation: Identifiable, Sendable {
     }
 }
 
-/// Draws arrows over the composition.
+/// An outlined rectangle.
+nonisolated struct RectangleAnnotation: Identifiable, Sendable {
+    let id = UUID()
+    var rect: CGRect
+    var color: AnnotationColor
+    var lineWidth: CGFloat = 4
+
+    var path: Path {
+        Path(roundedRect: rect, cornerRadius: 4)
+    }
+}
+
+/// A single line of text whose top-left corner is at `origin`.
+nonisolated struct TextAnnotation: Identifiable, Sendable {
+    static let fontSize: CGFloat = 24
+
+    let id = UUID()
+    var origin: CGPoint
+    var text: String
+    var color: AnnotationColor
+}
+
+/// A numbered badge centered at `center`, for marking steps.
+nonisolated struct CounterAnnotation: Identifiable, Sendable {
+    static let diameter: CGFloat = 28
+
+    let id = UUID()
+    var center: CGPoint
+    var number: Int
+    var color: AnnotationColor
+
+    var circle: Path {
+        let radius = Self.diameter / 2
+        return Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: Self.diameter, height: Self.diameter))
+    }
+}
+
+/// An area of the screenshot hidden behind large pixels.
+nonisolated struct PixelateAnnotation: Identifiable, Sendable {
+    let id = UUID()
+    var rect: CGRect
+}
+
+extension CGRect {
+    /// Rectangle spanning two corner points; `square` makes it a square along the longer side.
+    nonisolated init(corner start: CGPoint, to end: CGPoint, square: Bool = false) {
+        var width = end.x - start.x
+        var height = end.y - start.y
+        if square {
+            let side = max(abs(width), abs(height))
+            width = width < 0 ? -side : side
+            height = height < 0 ? -side : side
+        }
+        self = CGRect(x: start.x, y: start.y, width: width, height: height).standardized
+    }
+}
+
+// MARK: - Rendering
+
+/// Draws vector annotations (everything except pixelation) over the composition.
 struct AnnotationLayer: View {
-    let arrows: [ArrowAnnotation]
+    let annotations: [Annotation]
     /// Position of the screenshot's top-left corner within the layer.
     let origin: CGPoint
 
@@ -86,10 +205,89 @@ struct AnnotationLayer: View {
         Canvas { context, _ in
             context.translateBy(x: origin.x, y: origin.y)
             context.addFilter(.shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1))
-            for arrow in arrows {
-                context.fill(arrow.path, with: .color(arrow.color.color))
+
+            for annotation in annotations {
+                switch annotation {
+                case .arrow(let arrow):
+                    context.fill(arrow.path, with: .color(arrow.color.color))
+
+                case .rectangle(let rectangle):
+                    context.stroke(rectangle.path, with: .color(rectangle.color.color), lineWidth: rectangle.lineWidth)
+
+                case .text(let text):
+                    let label = Text(text.text)
+                        .font(.system(size: TextAnnotation.fontSize, weight: .bold))
+                        .foregroundStyle(text.color.color)
+                    context.draw(label, at: text.origin, anchor: .topLeading)
+
+                case .counter(let counter):
+                    context.fill(counter.circle, with: .color(counter.color.color))
+                    let label = Text("\(counter.number)")
+                        .font(.system(size: 15, weight: .bold).monospacedDigit())
+                        .foregroundStyle(counter.color.contrastingColor)
+                    context.draw(label, at: counter.center, anchor: .center)
+
+                case .pixelate:
+                    // Drawn by `PixelationLayer`, underneath everything else.
+                    break
+                }
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// Shows the pixelated screenshot only inside `rects`. Sized and positioned like the screenshot.
+struct PixelationLayer: View {
+    let pixelatedImage: CGImage
+    let scale: CGFloat
+    let rects: [CGRect]
+
+    var body: some View {
+        Image(decorative: pixelatedImage, scale: scale)
+            .mask { RectsShape(rects: rects) }
+            .allowsHitTesting(false)
+    }
+}
+
+private nonisolated struct RectsShape: Shape {
+    let rects: [CGRect]
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRects(rects)
+        return path
+    }
+}
+
+/// Creates pixelated copies of screenshots for `PixelateAnnotation`.
+nonisolated enum Pixelator {
+    /// Returns `image` made of square blocks `blockSize` pixels wide, each the average color of its area.
+    ///
+    /// Averages by downscaling with high-quality interpolation, then upscales without interpolation.
+    /// (`CIPixellate` samples one pixel per block instead, which lets thin text vanish or flicker.)
+    static func pixelate(_ image: CGImage, blockSize: CGFloat) -> CGImage? {
+        let block = max(Int(blockSize.rounded()), 1)
+        let width = image.width
+        let height = image.height
+        let smallWidth = (width + block - 1) / block
+        let smallHeight = (height + block - 1) / block
+
+        let colorSpace = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+
+        guard let small = CGContext(data: nil, width: smallWidth, height: smallHeight, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo),
+              let large = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: bitmapInfo)
+        else { return nil }
+
+        small.interpolationQuality = .high
+        small.draw(image, in: CGRect(x: 0, y: 0, width: smallWidth, height: smallHeight))
+        guard let smallImage = small.makeImage() else { return nil }
+
+        large.interpolationQuality = .none
+        // Anchor the block grid at the top-left; partial blocks fall off the bottom/right edges.
+        let gridHeight = smallHeight * block
+        large.draw(smallImage, in: CGRect(x: 0, y: height - gridHeight, width: smallWidth * block, height: gridHeight))
+        return large.makeImage()
     }
 }

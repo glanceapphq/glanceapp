@@ -3,8 +3,17 @@ import SwiftUI
 
 /// A mouse drag on the canvas, in canvas coordinates (points, top-left origin).
 enum CanvasDrag {
+    case began(location: CGPoint)
     case changed(start: CGPoint, location: CGPoint, isConstrained: Bool)
     case ended
+}
+
+/// Asks the canvas to show its inline text field. A different `id` means a new,
+/// empty field, even if the previous one was never seen removed.
+struct CanvasTextFieldRequest {
+    let id: UUID
+    /// Top-left of the text, in canvas space.
+    let origin: CGPoint
 }
 
 /// Hosts SwiftUI content in an `NSScrollView` to get native zoom and pan:
@@ -17,9 +26,14 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
     let canvasSize: CGSize
     @Binding var zoom: CGFloat
     let zoomToFitRequest: Int
-    /// Whether drags on the canvas are captured (and the cursor becomes a crosshair).
-    let isDrawingEnabled: Bool
+    /// Cursor over the canvas while a tool is active; `nil` lets the mouse pass through.
+    let cursor: NSCursor?
     let onDrag: (CanvasDrag) -> Void
+    /// The text field to show, or `nil` when not editing text.
+    let textField: CanvasTextFieldRequest?
+    let textColor: NSColor
+    /// Called with the typed text when text editing ends.
+    let onTextCommit: (String) -> Void
     @ViewBuilder let content: Content
 
     func makeCoordinator() -> Coordinator {
@@ -63,11 +77,15 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
         coordinator.zoom = $zoom
 
         coordinator.hostingView?.rootView = content
-        coordinator.inputView?.isDrawingEnabled = isDrawingEnabled
+        coordinator.inputView?.cursor = cursor
         coordinator.inputView?.onDrag = onDrag
+        coordinator.onTextCommit = onTextCommit
 
-        if let documentView = scrollView.documentView, documentView.frame.size != canvasSize {
-            documentView.setFrameSize(canvasSize)
+        if let documentView = scrollView.documentView {
+            if documentView.frame.size != canvasSize {
+                documentView.setFrameSize(canvasSize)
+            }
+            coordinator.updateTextField(textField, color: textColor, in: documentView)
         }
 
         if zoomToFitRequest != coordinator.zoomToFitRequest {
@@ -82,13 +100,16 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
         coordinator.detach()
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, NSTextFieldDelegate {
         var zoom: Binding<CGFloat>
         var zoomToFitRequest: Int
         var hostingView: NSHostingView<Content>?
         var inputView: CanvasInputView?
+        var onTextCommit: ((String) -> Void)?
         private weak var scrollView: NSScrollView?
         private var magnifyObserver: NSObjectProtocol?
+        private var textField: NSTextField?
+        private var textFieldID: UUID?
 
         init(zoom: Binding<CGFloat>, zoomToFitRequest: Int) {
             self.zoom = zoom
@@ -117,6 +138,82 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
                 self.magnifyObserver = nil
             }
             inputView?.onDrag = nil
+            removeTextField()
+            onTextCommit = nil
+        }
+
+        // MARK: Text editing
+
+        /// Shows, replaces or removes the inline text field to match the model.
+        ///
+        /// Clicking elsewhere commits the current text and starts a new session in the
+        /// same event, so the request can go straight from one id to the next without
+        /// passing through `nil`; a new id must therefore always get a fresh field.
+        func updateTextField(_ request: CanvasTextFieldRequest?, color: NSColor, in documentView: NSView) {
+            guard let request else {
+                removeTextField()
+                return
+            }
+
+            if request.id != textFieldID {
+                removeTextField()
+                textField = makeTextField(in: documentView)
+                textFieldID = request.id
+            }
+
+            guard let field = textField else { return }
+            field.textColor = color
+            // Compensate for the field's internal inset so typed text lines up with the rendered annotation.
+            field.setFrameOrigin(CGPoint(x: request.origin.x - 2, y: request.origin.y))
+        }
+
+        private func removeTextField() {
+            textField?.delegate = nil
+            textField?.removeFromSuperview()
+            textField = nil
+            textFieldID = nil
+        }
+
+        private func makeTextField(in documentView: NSView) -> NSTextField {
+            let field = NSTextField(string: "")
+            field.font = .systemFont(ofSize: TextAnnotation.fontSize, weight: .bold)
+            field.isBordered = false
+            field.drawsBackground = false
+            field.focusRingType = .none
+            field.placeholderString = "Text"
+            field.cell?.wraps = false
+            field.cell?.isScrollable = true
+            field.delegate = self
+            field.sizeToFit()
+            field.setFrameSize(CGSize(width: max(field.frame.width, 80), height: field.frame.height))
+
+            // Added last so it sits above the input view and receives clicks.
+            documentView.addSubview(field)
+            documentView.window?.makeFirstResponder(field)
+            return field
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            let height = field.frame.height
+            field.sizeToFit()
+            field.setFrameSize(CGSize(width: max(field.frame.width + 8, 80), height: height))
+        }
+
+        /// Enter and Esc finish editing; ending editing (by any means) commits the text.
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.insertNewline(_:)) || selector == #selector(NSResponder.cancelOperation(_:)) else {
+                return false
+            }
+            control.window?.makeFirstResponder(nil)
+            return true
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField, field === textField else { return }
+            // Detach first so a second end-editing notification can't commit twice.
+            field.delegate = nil
+            onTextCommit?(field.stringValue)
         }
 
         func setMagnification(_ value: CGFloat) {
@@ -146,11 +243,11 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 }
 
 /// Transparent view over the canvas that turns mouse drags into `CanvasDrag` events.
-/// When drawing is disabled it ignores the mouse entirely, letting events pass through.
+/// With no cursor set (no active tool) it ignores the mouse entirely, letting events pass through.
 final class CanvasInputView: NSView {
-    var isDrawingEnabled = false {
+    var cursor: NSCursor? {
         didSet {
-            guard isDrawingEnabled != oldValue else { return }
+            guard cursor !== oldValue else { return }
             window?.invalidateCursorRects(for: self)
         }
     }
@@ -161,19 +258,27 @@ final class CanvasInputView: NSView {
     override var isFlipped: Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        isDrawingEnabled ? super.hitTest(point) : nil
+        cursor != nil ? super.hitTest(point) : nil
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() {
-        if isDrawingEnabled {
-            addCursorRect(bounds, cursor: .crosshair)
+        if let cursor {
+            addCursorRect(bounds, cursor: cursor)
         }
     }
 
     override func mouseDown(with event: NSEvent) {
-        dragStart = location(of: event)
+        // A click outside the text being typed only finishes (commits) it; the next click starts something new.
+        if let editor = window?.firstResponder as? NSTextView, editor.isFieldEditor {
+            window?.makeFirstResponder(nil)
+            return
+        }
+
+        let location = location(of: event)
+        dragStart = location
+        onDrag?(.began(location: location))
     }
 
     override func mouseDragged(with event: NSEvent) {

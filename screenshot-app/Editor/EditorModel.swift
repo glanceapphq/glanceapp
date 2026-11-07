@@ -18,10 +18,15 @@ final class EditorModel {
     var activeTool: EditorTool? = .arrow
 
     /// Committed annotations, in drawing order.
-    private(set) var annotations: [ArrowAnnotation] = []
-    /// The arrow currently being dragged out, not yet committed.
-    var draftArrow: ArrowAnnotation?
-    private var redoStack: [ArrowAnnotation] = []
+    private(set) var annotations: [Annotation] = []
+    /// The annotation currently being dragged out, not yet committed.
+    private(set) var draft: Annotation?
+    private var redoStack: [Annotation] = []
+
+    /// Text currently being typed, or `nil` when not editing text.
+    private(set) var textEditing: TextEditingSession?
+
+    @ObservationIgnored private var pixelatedCache: CGImage?
 
     /// Canvas magnification; `1` shows the screenshot at its native point size.
     var zoom: CGFloat = 1
@@ -65,44 +70,114 @@ final class EditorModel {
 
     // MARK: Annotations
 
-    var canUndo: Bool { !annotations.isEmpty }
-    var canRedo: Bool { !redoStack.isEmpty }
+    /// Committed annotations plus the one being drawn.
+    var visibleAnnotations: [Annotation] {
+        annotations + [draft].compactMap { $0 }
+    }
 
-    /// Turns a drag on the canvas into a draft arrow, committing it when the drag ends.
-    func handleCanvasDrag(_ drag: CanvasDrag) {
-        guard activeTool == .arrow else { return }
-
-        switch drag {
-        case let .changed(start, location, isConstrained):
-            let start = toScreenshotSpace(start)
-            var end = toScreenshotSpace(location)
-            if isConstrained {
-                end = ArrowAnnotation.snappedEnd(from: start, to: end)
-            }
-            draftArrow = ArrowAnnotation(start: start, end: end, color: annotationColor)
-
-        case .ended:
-            // Ignore clicks and tiny accidental drags.
-            if let draftArrow, draftArrow.length >= 4 {
-                addAnnotation(draftArrow)
-            }
-            draftArrow = nil
+    /// Areas to pixelate, in screenshot space.
+    var pixelatedRects: [CGRect] {
+        visibleAnnotations.compactMap {
+            if case .pixelate(let pixelate) = $0 { pixelate.rect } else { nil }
         }
     }
 
-    func addAnnotation(_ arrow: ArrowAnnotation) {
-        annotations.append(arrow)
+    /// Pixelated copy of the screenshot, created on first use.
+    var pixelatedScreenshot: CGImage? {
+        if pixelatedCache == nil {
+            pixelatedCache = Pixelator.pixelate(screenshot.image, blockSize: 12 * screenshot.scale)
+        }
+        return pixelatedCache
+    }
+
+    var isEditingText: Bool { textEditing != nil }
+    var canUndo: Bool { !annotations.isEmpty && !isEditingText }
+    var canRedo: Bool { !redoStack.isEmpty && !isEditingText }
+
+    /// Where the canvas should show its text field, in canvas space.
+    var textFieldRequest: CanvasTextFieldRequest? {
+        textEditing.map { CanvasTextFieldRequest(id: $0.id, origin: CGPoint(x: $0.origin.x + padding, y: $0.origin.y + padding)) }
+    }
+
+    /// Applies a mouse interaction on the canvas using the active tool.
+    func handleCanvasDrag(_ drag: CanvasDrag) {
+        guard let activeTool else { return }
+
+        switch drag {
+        case .began(let location):
+            let point = toScreenshotSpace(location)
+            switch activeTool {
+            case .counter:
+                addAnnotation(.counter(CounterAnnotation(center: point, number: nextCounterNumber, color: annotationColor)))
+            case .text:
+                textEditing = TextEditingSession(origin: point)
+            case .arrow, .rectangle, .pixelate:
+                break
+            }
+
+        case let .changed(start, location, isConstrained):
+            let start = toScreenshotSpace(start)
+            let end = toScreenshotSpace(location)
+            switch activeTool {
+            case .arrow:
+                let end = isConstrained ? ArrowAnnotation.snappedEnd(from: start, to: end) : end
+                draft = .arrow(ArrowAnnotation(start: start, end: end, color: annotationColor))
+            case .rectangle:
+                draft = .rectangle(RectangleAnnotation(rect: CGRect(corner: start, to: end, square: isConstrained), color: annotationColor))
+            case .pixelate:
+                draft = .pixelate(PixelateAnnotation(rect: CGRect(corner: start, to: end, square: isConstrained)))
+            case .text, .counter:
+                break
+            }
+
+        case .ended:
+            if let draft, Self.isLargeEnough(draft) {
+                addAnnotation(draft)
+            }
+            draft = nil
+        }
+    }
+
+    /// Finishes text editing, adding the text unless it's blank.
+    func commitText(_ text: String) {
+        guard let origin = textEditing?.origin else { return }
+        textEditing = nil
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        addAnnotation(.text(TextAnnotation(origin: origin, text: trimmed, color: annotationColor)))
+    }
+
+    func addAnnotation(_ annotation: Annotation) {
+        annotations.append(annotation)
         redoStack.removeAll()
     }
 
     func undo() {
-        guard let last = annotations.popLast() else { return }
+        guard canUndo, let last = annotations.popLast() else { return }
         redoStack.append(last)
     }
 
     func redo() {
-        guard let next = redoStack.popLast() else { return }
+        guard canRedo, let next = redoStack.popLast() else { return }
         annotations.append(next)
+    }
+
+    private var nextCounterNumber: Int {
+        let numbers = annotations.compactMap {
+            if case .counter(let counter) = $0 { counter.number } else { nil }
+        }
+        return (numbers.max() ?? 0) + 1
+    }
+
+    /// Filters out clicks and tiny accidental drags.
+    private static func isLargeEnough(_ annotation: Annotation) -> Bool {
+        switch annotation {
+        case .arrow(let arrow): arrow.length >= 4
+        case .rectangle(let rectangle): rectangle.rect.width >= 4 && rectangle.rect.height >= 4
+        case .pixelate(let pixelate): pixelate.rect.width >= 4 && pixelate.rect.height >= 4
+        case .text, .counter: true
+        }
     }
 
     // MARK: Zoom
@@ -112,7 +187,7 @@ final class EditorModel {
     func zoomToActualSize() { setZoom(1) }
     func zoomToFit() { zoomToFitRequest += 1 }
 
-    /// Canvas points → screenshot points (arrows are stored relative to the screenshot).
+    /// Canvas points → screenshot points (annotations are stored relative to the screenshot).
     private func toScreenshotSpace(_ point: CGPoint) -> CGPoint {
         CGPoint(x: point.x - padding, y: point.y - padding)
     }
@@ -120,6 +195,13 @@ final class EditorModel {
     private func setZoom(_ value: CGFloat) {
         zoom = value.clamped(to: Self.zoomRange)
     }
+}
+
+/// One text-typing session; each click with the text tool starts a new one.
+struct TextEditingSession {
+    let id = UUID()
+    /// Top-left of the text, in screenshot space.
+    let origin: CGPoint
 }
 
 /// Background presets for the composition.

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Callbacks from the editor UI to its window controller.
@@ -25,8 +26,11 @@ struct EditorView: View {
                     canvasSize: model.canvasSize,
                     zoom: $model.zoom,
                     zoomToFitRequest: model.zoomToFitRequest,
-                    isDrawingEnabled: model.activeTool == .arrow,
-                    onDrag: model.handleCanvasDrag
+                    cursor: model.activeTool?.cursor,
+                    onDrag: model.handleCanvasDrag,
+                    textField: model.textFieldRequest,
+                    textColor: NSColor(model.annotationColor.color),
+                    onTextCommit: model.commitText
                 ) {
                     CompositionView(model: model)
                 }
@@ -52,22 +56,25 @@ private struct EditorToolbar: View {
             Button(action: actions.close) {
                 Image(systemName: "xmark")
             }
-            .keyboardShortcut(.cancelAction)
+            .keyboardShortcut(unlessEditingText(.cancelAction))
             .help("Close (Esc)")
 
             Divider().frame(height: 20)
 
-            ToolButton(systemImage: "arrow.up.right", isSelected: model.activeTool == .arrow) {
-                model.activeTool = model.activeTool == .arrow ? nil : .arrow
+            HStack(spacing: 2) {
+                ForEach(EditorTool.allCases) { tool in
+                    ToolButton(systemImage: tool.systemImage, isSelected: model.activeTool == tool) {
+                        model.activeTool = model.activeTool == tool ? nil : tool
+                    }
+                    .keyboardShortcut(unlessEditingText(KeyboardShortcut(KeyEquivalent(tool.shortcutKey), modifiers: [])))
+                    .help("\(tool.title) (\(tool.shortcutKey.uppercased()))")
+                }
             }
-            .keyboardShortcut("a", modifiers: [])
-            .help("Arrow (A)")
 
             HStack(spacing: 6) {
                 ForEach(AnnotationColor.allCases) { color in
                     ColorDot(color: color, isSelected: model.annotationColor == color) {
                         model.annotationColor = color
-                        model.activeTool = .arrow
                     }
                 }
             }
@@ -77,14 +84,14 @@ private struct EditorToolbar: View {
             Button(action: model.undo) {
                 Image(systemName: "arrow.uturn.backward")
             }
-            .keyboardShortcut("z", modifiers: .command)
+            .keyboardShortcut(unlessEditingText(KeyboardShortcut("z", modifiers: .command)))
             .disabled(!model.canUndo)
             .help("Undo (⌘Z)")
 
             Button(action: model.redo) {
                 Image(systemName: "arrow.uturn.forward")
             }
-            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .keyboardShortcut(unlessEditingText(KeyboardShortcut("z", modifiers: [.command, .shift])))
             .disabled(!model.canRedo)
             .help("Redo (⇧⌘Z)")
 
@@ -123,7 +130,7 @@ private struct EditorToolbar: View {
             HStack(spacing: 8) {
                 Button("Copy", action: actions.copy)
                     .buttonStyle(.bordered)
-                    .keyboardShortcut("c", modifiers: .command)
+                    .keyboardShortcut(unlessEditingText(KeyboardShortcut("c", modifiers: .command)))
                     .help("Copy to Clipboard (⌘C)")
 
                 Button("Save", action: actions.save)
@@ -141,6 +148,22 @@ private struct EditorToolbar: View {
             Color.clear
                 .contentShape(.rect)
                 .gesture(WindowDragGesture())
+        }
+    }
+}
+
+extension EditorToolbar {
+    /// Disables shortcuts that would steal keys from the inline text field while typing.
+    func unlessEditingText(_ shortcut: KeyboardShortcut) -> KeyboardShortcut? {
+        model.isEditingText ? nil : shortcut
+    }
+}
+
+private extension EditorTool {
+    var cursor: NSCursor {
+        switch self {
+        case .text: .iBeam
+        case .arrow, .rectangle, .counter, .pixelate: .crosshair
         }
     }
 }

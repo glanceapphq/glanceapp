@@ -9,9 +9,17 @@ struct CompositionView: View {
 
     var body: some View {
         let screenshot = model.screenshot
+        let pixelatedRects = model.pixelatedRects
 
         Image(decorative: screenshot.image, scale: screenshot.scale)
+            .overlay {
+                if !pixelatedRects.isEmpty, let pixelated = model.pixelatedScreenshot {
+                    PixelationLayer(pixelatedImage: pixelated, scale: screenshot.scale, rects: pixelatedRects)
+                }
+            }
             .clipShape(.rect(cornerRadius: model.cornerRadius))
+            // Flatten first: `.shadow` otherwise shadows each layer separately, including the pixelation overlay.
+            .compositingGroup()
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
             .padding(model.padding)
             .frame(width: model.canvasSize.width, height: model.canvasSize.height)
@@ -22,7 +30,7 @@ struct CompositionView: View {
             }
             .overlay {
                 AnnotationLayer(
-                    arrows: model.annotations + [model.draftArrow].compactMap { $0 },
+                    annotations: model.visibleAnnotations,
                     origin: CGPoint(x: model.padding, y: model.padding)
                 )
             }
