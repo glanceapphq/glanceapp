@@ -26,18 +26,24 @@ final class CaptureCoordinator {
 
         let selection = SelectionOverlayController(screen: screen)
         self.selection = selection
-        selection.begin { [weak self] rect in
+        // Snapshot the window list before the overlay appears, so it isn't in the list.
+        selection.begin(windows: captureService.selectableWindows(on: screen)) { [weak self] result in
             guard let self else { return }
-            guard let rect else {
-                endCapture()
-                return
-            }
 
-            // Keep the overlay up while capturing; it's excluded from the image,
-            // so there's no need to wait for the window server to remove it.
-            let excluded = Set([self.selection?.windowID].compactMap { $0 })
-            Task {
-                await self.perform(on: screen) { try await self.captureService.captureRect(rect, on: screen, excludingWindowIDs: excluded) }
+            switch result {
+            case .area(let rect):
+                // Keep the overlay up while capturing; it's excluded from the image,
+                // so there's no need to wait for the window server to remove it.
+                let excluded = Set([self.selection?.windowID].compactMap { $0 })
+                Task {
+                    await self.perform(on: screen) { try await self.captureService.captureRect(rect, on: screen, excludingWindowIDs: excluded) }
+                }
+            case .window(let windowID):
+                Task {
+                    await self.perform(on: screen) { try await self.captureService.captureWindow(windowID) }
+                }
+            case nil:
+                endCapture()
             }
         }
     }

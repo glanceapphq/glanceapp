@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// Shows a transparent full-screen window on one screen and reports the area the user selects.
+/// Shows a transparent full-screen window on one screen and reports the area or window the user picks.
 ///
 /// Call `close()` when done; it tears down the window, hosting view and key monitor.
 final class SelectionOverlayController {
@@ -11,7 +11,7 @@ final class SelectionOverlayController {
     private let model = SelectionModel()
     private var window: NSWindow?
     private var keyMonitor: Any?
-    private var completion: ((CGRect?) -> Void)?
+    private var completion: ((SelectionResult?) -> Void)?
 
     init(screen: NSScreen) {
         self.screen = screen
@@ -22,10 +22,15 @@ final class SelectionOverlayController {
         window.map { CGWindowID($0.windowNumber) }
     }
 
-    /// Shows the overlay. `completion` is called once with the selected rect
-    /// (screen-local points, top-left origin), or `nil` if the user cancelled.
-    func begin(completion: @escaping (CGRect?) -> Void) {
+    /// Shows the overlay. `completion` is called once with the user's pick, or `nil` if they cancelled.
+    ///
+    /// - Parameter windows: Windows that can be picked by clicking, frontmost first.
+    func begin(windows: [SelectableWindow], completion: @escaping (SelectionResult?) -> Void) {
         self.completion = completion
+        model.windows = windows
+        // Highlight the window under the pointer right away, before the mouse moves.
+        let mouse = NSEvent.mouseLocation
+        model.hoverLocation = CGPoint(x: mouse.x - screen.frame.minX, y: screen.frame.maxY - mouse.y)
 
         let window = OverlayWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -34,8 +39,8 @@ final class SelectionOverlayController {
         window.isOpaque = false
         window.hasShadow = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        window.contentView = OverlayHostingView(rootView: SelectionView(model: model) { [weak self] rect in
-            self?.finish(with: rect)
+        window.contentView = OverlayHostingView(rootView: SelectionView(model: model) { [weak self] result in
+            self?.finish(with: result)
         })
         window.setFrame(screen.frame, display: false)
         self.window = window
@@ -63,12 +68,9 @@ final class SelectionOverlayController {
 
     // MARK: - Private
 
-    private func finish(with rect: CGRect?) {
+    private func finish(with result: SelectionResult?) {
         guard let completion else { return }
         self.completion = nil
-
-        // A click or tiny drag counts as a cancel.
-        let result = rect.flatMap { $0.width >= 4 && $0.height >= 4 ? $0 : nil }
 
         // Defer so the hosting view isn't torn down from inside its own gesture callback.
         Task { completion(result) }
