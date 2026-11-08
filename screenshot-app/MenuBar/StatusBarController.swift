@@ -13,7 +13,7 @@ final class StatusBarController: NSObject {
         super.init()
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Screenshot")
+            button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glance")
             button.image?.isTemplate = true
         }
         statusItem.menu = makeMenu()
@@ -53,7 +53,7 @@ final class StatusBarController: NSObject {
 
         menu.addItem(.separator())
 
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Glance", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         return menu
     }
