@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="screenshot-app/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="128" height="128" alt="Glance app icon">
+</p>
+
 # Glance
 
 **Beautiful screenshots in two keystrokes.** Glance is a native macOS menu bar app that captures any area, window or screen, frames it on a polished background, lets you mark it up, and puts the result on your clipboard — ready to paste into Slack, docs or a tweet.

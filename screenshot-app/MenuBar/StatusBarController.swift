@@ -28,10 +28,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         self.onOpenSettings = onOpenSettings
         super.init()
 
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Glance")
-            button.image?.isTemplate = true
-        }
+        statusItem.button?.image = MenuBarIcon.make()
         statusItem.menu = makeMenu()
     }
 
