@@ -1,6 +1,6 @@
 import AppKit
 
-/// Glance's mark for the menu bar: an eye inside viewfinder corners, as in the app icon.
+/// Glance's mark for the menu bar: a focus dot inside viewfinder corners, as in the app icon.
 ///
 /// Drawn in code as a template image, so the menu bar tints it for light and dark
 /// appearances and it stays sharp at any scale.
@@ -28,21 +28,10 @@ enum MenuBarIcon {
             }
             corners.stroke()
 
-            // Almond-shaped eye outline.
+            // Focus dot in the centre.
             let center = CGPoint(x: rect.midX, y: rect.midY)
-            let eye = NSBezierPath()
-            eye.lineWidth = 1.25
-            eye.move(to: CGPoint(x: center.x - 5, y: center.y))
-            eye.curve(to: CGPoint(x: center.x + 5, y: center.y), controlPoint1: CGPoint(x: center.x - 2.5, y: center.y - 3.6), controlPoint2: CGPoint(x: center.x + 2.5, y: center.y - 3.6))
-            eye.curve(to: CGPoint(x: center.x - 5, y: center.y), controlPoint1: CGPoint(x: center.x + 2.5, y: center.y + 3.6), controlPoint2: CGPoint(x: center.x - 2.5, y: center.y + 3.6))
-            eye.close()
-            eye.stroke()
-
-            // Iris with a highlight cut out of it.
-            let iris: CGFloat = 2.3
-            NSBezierPath(ovalIn: CGRect(x: center.x - iris, y: center.y - iris, width: iris * 2, height: iris * 2)).fill()
-            NSGraphicsContext.current?.compositingOperation = .clear
-            NSBezierPath(ovalIn: CGRect(x: center.x + 0.2, y: center.y - 1.6, width: 1.2, height: 1.2)).fill()
+            let dot: CGFloat = 2.4
+            NSBezierPath(ovalIn: CGRect(x: center.x - dot, y: center.y - dot, width: dot * 2, height: dot * 2)).fill()
             return true
         }
         image.isTemplate = true
