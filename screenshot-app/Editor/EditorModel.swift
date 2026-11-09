@@ -40,12 +40,21 @@ final class EditorModel {
     /// Incremented to ask the canvas to fit itself into the visible area.
     private(set) var zoomToFitRequest = 0
 
-    init(screenshot: Screenshot, preferences: EditorPreferences = .load()) {
+    /// - Parameter document: Earlier edits to restore, e.g. when reopening from history;
+    ///   `nil` starts with no annotations and the remembered style.
+    init(screenshot: Screenshot, document: EditorDocument? = nil, preferences: EditorPreferences = .load()) {
+        let preferences = document?.preferences ?? preferences
         self.screenshot = screenshot
         self.padding = preferences.padding
         self.cornerRadius = preferences.cornerRadius
         self.background = preferences.background
         self.annotationColor = preferences.annotationColor
+        self.annotations = document?.annotations ?? []
+    }
+
+    /// Current edits, for reopening the screenshot later.
+    var document: EditorDocument {
+        EditorDocument(annotations: annotations, preferences: preferences)
     }
 
     var preferences: EditorPreferences {
@@ -146,7 +155,8 @@ final class EditorModel {
         guard let frame = selectionFrame else { return [] }
         return annotation.handles.map { ($0, frame.point(for: $0)) }
     }
-    var hasAnnotations: Bool { !annotations.isEmpty }
+    /// Whether annotations changed since the editor opened.
+    private(set) var hasAnnotationChanges = false
 
     /// Applies a mouse interaction on the canvas.
     ///
@@ -293,6 +303,7 @@ final class EditorModel {
     private func recordHistory(_ snapshot: [Annotation]) {
         undoStack.append(snapshot)
         redoStack.removeAll()
+        hasAnnotationChanges = true
     }
 
     /// Starts editing an existing text annotation in place.
@@ -370,6 +381,12 @@ final class EditorModel {
     private func setZoom(_ value: CGFloat) {
         zoom = value.clamped(to: Self.zoomRange)
     }
+}
+
+/// Annotations and style of an edited screenshot.
+struct EditorDocument {
+    var annotations: [Annotation]
+    var preferences: EditorPreferences
 }
 
 /// Dragging an existing annotation: moving it, or resizing it by one of its handles.

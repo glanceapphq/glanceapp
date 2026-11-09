@@ -4,20 +4,23 @@ import OSLog
 /// Entry point for capture requests coming from the menu bar or global hot keys.
 ///
 /// Gates requests behind the permission check, drives the selection overlay and
-/// opens each result in its own editor window.
+/// opens each result in its own editor window. Captures are recorded in `history`
+/// and can be reopened from it.
 final class CaptureCoordinator {
     private let permissions: PermissionService
+    private let history: CaptureHistory
     private let captureService = CaptureService()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "screenshot-app", category: "Capture")
 
     private var selection: SelectionOverlayController?
-    /// Open editors, kept alive until their window closes.
-    private var editors: [ObjectIdentifier: EditorWindowController] = [:]
+    /// Open editors by history entry, kept alive until their window closes.
+    private var editors: [UUID: EditorWindowController] = [:]
     /// Guards against overlapping captures (e.g. a hot key pressed during selection).
     private var isBusy = false
 
-    init(permissions: PermissionService) {
+    init(permissions: PermissionService, history: CaptureHistory) {
         self.permissions = permissions
+        self.history = history
     }
 
     func captureArea() {
@@ -44,6 +47,16 @@ final class CaptureCoordinator {
         Task {
             await perform(on: screen) { try await self.captureService.captureScreen(screen) }
         }
+    }
+
+    /// Opens a recent capture in an editor, or brings its editor forward if it's already open.
+    func reopen(_ id: UUID) {
+        if let editor = editors[id] {
+            editor.show(on: nil)
+            return
+        }
+        guard let entry = history.entry(id: id), let screenshot = entry.screenshot else { return }
+        openEditor(for: entry, screenshot: screenshot, on: NSScreen.underMouse)
     }
 
     // MARK: - Private
@@ -79,7 +92,7 @@ final class CaptureCoordinator {
             let screenshot = try await capture()
             logger.info("Captured \(screenshot.image.width)×\(screenshot.image.height) px")
             endCapture()
-            openEditor(for: screenshot, on: screen)
+            openEditor(for: history.add(screenshot), screenshot: screenshot, on: screen)
         } catch {
             fail(with: error)
         }
@@ -97,10 +110,15 @@ final class CaptureCoordinator {
         isBusy = false
     }
 
-    private func openEditor(for screenshot: Screenshot, on screen: NSScreen) {
-        let editor = EditorWindowController(screenshot: screenshot)
-        let id = ObjectIdentifier(editor)
-        editor.onClose = { [weak self] in self?.editors[id] = nil }
+    private func openEditor(for entry: CaptureHistoryEntry, screenshot: Screenshot, on screen: NSScreen?) {
+        let editor = EditorWindowController(screenshot: screenshot, document: entry.document)
+        let id = entry.id
+        editor.onClose = { [weak self, weak entry] document in
+            if let document {
+                entry?.document = document
+            }
+            self?.editors[id] = nil
+        }
         editors[id] = editor
         editor.show(on: screen)
     }

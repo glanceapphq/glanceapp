@@ -14,6 +14,7 @@
 - 🎨 **Presentation-ready in one step** — gradient backgrounds, padding, rounded corners and a soft shadow
 - ✏️ **Markup tools** — arrows, boxes, text, numbered steps and pixelation for sensitive data
 - 📋 **Copy or save** — Retina-resolution PNG to the clipboard, Desktop or Downloads
+- 🕘 **Recent captures** — reopen any of your last 10 screenshots, annotations included
 - 🔒 **Private by design** — no accounts, no cloud, no network access
 
 ---
@@ -82,6 +83,12 @@
 - **Save (⌘S)** — writes a PNG to your Desktop or Downloads, named like macOS does (`Screenshot 2026-11-07 at 15.04.32.png`). Existing files are never overwritten.
 - **Retina-sharp** — exports at the full resolution of your display, with correct DPI so images open at their on-screen size.
 - **Transparent PNGs** — choose the "None" background to keep transparency, shadow included.
+
+### Pick up where you left off
+
+- **Recent Captures** — the menu bar keeps your last 10 screenshots with thumbnails. Pick one to reopen it with its annotations and style, exactly as you left it.
+- **Nothing lost by closing** — closing an editor keeps your edits in Recent Captures; only *Discard* throws them away.
+- **Memory only** — history is compressed in the background, never written to disk, and gone when you quit. **Clear History** empties it at any time.
 
 ### Fits into your Mac
 
@@ -161,7 +168,7 @@ Both can be changed in **Settings → Shortcuts**.
 
 ## Privacy
 
-Glance works entirely offline. Screenshots exist only in memory, on your clipboard, or in the folder you save them to. Nothing is collected, uploaded or shared. The only permissions it uses are Screen Recording (to capture) and file access for saving.
+Glance works entirely offline. Screenshots exist only in memory (including Recent Captures, which is cleared when you quit), on your clipboard, or in the folder you save them to. Nothing is collected, uploaded or shared. The only permissions it uses are Screen Recording (to capture) and file access for saving.
 
 ---
 
@@ -189,5 +196,4 @@ Design notes:
 
 ## Roadmap
 
-- [ ] Capture history in the menu bar
 - [ ] Unit tests (XCTest target)

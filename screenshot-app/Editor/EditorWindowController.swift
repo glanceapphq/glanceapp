@@ -6,15 +6,17 @@ import SwiftUI
 /// The controller owns the window; when it closes, the window, hosting view and
 /// model are released and `onClose` lets the owner drop its reference.
 final class EditorWindowController: NSObject, NSWindowDelegate {
-    var onClose: (() -> Void)?
+    /// Called when the window closes, with the final edits, or `nil` if the user discarded them.
+    var onClose: ((EditorDocument?) -> Void)?
 
     private let model: EditorModel
     private let renderService = RenderService()
     private let exportService = ExportService()
     private var window: NSWindow?
+    private var isDiscarded = false
 
-    init(screenshot: Screenshot) {
-        self.model = EditorModel(screenshot: screenshot)
+    init(screenshot: Screenshot, document: EditorDocument? = nil) {
+        self.model = EditorModel(screenshot: screenshot, document: document)
     }
 
     /// Shows the editor centered on `screen` (or the main screen).
@@ -28,21 +30,22 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.invalidateShadow()
     }
 
-    /// User-initiated close: asks before discarding annotations.
+    /// User-initiated close: asks before discarding annotation changes.
     func requestClose() {
-        guard model.hasAnnotations, let window else {
+        guard model.hasAnnotationChanges, let window else {
             close()
             return
         }
 
         let alert = NSAlert()
-        alert.messageText = "Discard this screenshot?"
+        alert.messageText = "Discard your changes?"
         alert.informativeText = "Your annotations haven't been copied or saved."
         alert.addButton(withTitle: "Discard")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         alert.beginSheetModal(for: window) { [weak self] response in
             if response == .alertFirstButtonReturn {
+                self?.isDiscarded = true
                 self?.close()
             }
         }
@@ -66,7 +69,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window?.delegate = nil
         window?.contentView = nil
         window = nil
-        onClose?()
+        onClose?(isDiscarded ? nil : model.document)
         onClose = nil
     }
 

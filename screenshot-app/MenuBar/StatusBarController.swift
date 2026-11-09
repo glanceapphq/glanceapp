@@ -1,14 +1,27 @@
 import AppKit
 
 /// Owns the menu bar icon and its menu.
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onCapture: (CaptureMode) -> Void
+    private let recentCaptures: () -> [CaptureHistoryEntry]
+    private let onOpenRecent: (UUID) -> Void
+    private let onClearRecent: () -> Void
     private let onOpenSettings: () -> Void
     private var captureItems: [CaptureMode: NSMenuItem] = [:]
+    private let recentMenu = NSMenu(title: "Recent Captures")
 
-    init(onCapture: @escaping (CaptureMode) -> Void, onOpenSettings: @escaping () -> Void) {
+    init(
+        onCapture: @escaping (CaptureMode) -> Void,
+        recentCaptures: @escaping () -> [CaptureHistoryEntry],
+        onOpenRecent: @escaping (UUID) -> Void,
+        onClearRecent: @escaping () -> Void,
+        onOpenSettings: @escaping () -> Void
+    ) {
         self.onCapture = onCapture
+        self.recentCaptures = recentCaptures
+        self.onOpenRecent = onOpenRecent
+        self.onClearRecent = onClearRecent
         self.onOpenSettings = onOpenSettings
         super.init()
 
@@ -47,6 +60,14 @@ final class StatusBarController: NSObject {
 
         menu.addItem(.separator())
 
+        // Filled in by `menuNeedsUpdate(_:)` each time it opens.
+        recentMenu.delegate = self
+        let recent = NSMenuItem(title: "Recent Captures", action: nil, keyEquivalent: "")
+        recent.submenu = recentMenu
+        menu.addItem(recent)
+
+        menu.addItem(.separator())
+
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -56,6 +77,49 @@ final class StatusBarController: NSObject {
         menu.addItem(NSMenuItem(title: "Quit Glance", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         return menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === recentMenu else { return }
+        menu.removeAllItems()
+
+        let entries = recentCaptures()
+        guard !entries.isEmpty else {
+            let empty = NSMenuItem(title: "No Recent Captures", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+
+        for entry in entries {
+            let item = NSMenuItem(title: Self.title(for: entry), action: #selector(openRecent(_:)), keyEquivalent: "")
+            item.image = entry.thumbnail
+            item.representedObject = entry.id
+            item.target = self
+            menu.addItem(item)
+        }
+
+        menu.addItem(.separator())
+        let clear = NSMenuItem(title: "Clear History", action: #selector(clearRecent), keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
+    }
+
+    /// E.g. "14:32 · 1280 × 720", with the date for captures from earlier days.
+    private static func title(for entry: CaptureHistoryEntry) -> String {
+        let time = Calendar.current.isDateInToday(entry.date)
+            ? entry.date.formatted(date: .omitted, time: .shortened)
+            : entry.date.formatted(date: .abbreviated, time: .shortened)
+        return "\(time) · \(Int(entry.size.width.rounded())) × \(Int(entry.size.height.rounded()))"
+    }
+
+    @objc private func openRecent(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        onOpenRecent(id)
+    }
+
+    @objc private func clearRecent() {
+        onClearRecent()
     }
 
     @objc private func captureSelected(_ sender: NSMenuItem) {

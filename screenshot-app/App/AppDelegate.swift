@@ -4,7 +4,8 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
     private let permissions = PermissionService()
-    private lazy var captureCoordinator = CaptureCoordinator(permissions: permissions)
+    private let history = CaptureHistory()
+    private lazy var captureCoordinator = CaptureCoordinator(permissions: permissions, history: history)
     private lazy var settingsWindow = SettingsWindowController(
         appState: appState,
         permissions: permissions,
@@ -22,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusBar = StatusBarController(
             onCapture: { [weak self] mode in self?.capture(mode) },
+            recentCaptures: { [weak self] in self?.history.entries ?? [] },
+            onOpenRecent: { [weak self] id in self?.captureCoordinator.reopen(id) },
+            onClearRecent: { [weak self] in self?.history.removeAll() },
             onOpenSettings: { [weak self] in self?.settingsWindow.show() }
         )
 
