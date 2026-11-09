@@ -207,6 +207,8 @@ Design notes:
 
 `scripts/release-dmg.sh` archives the app, exports it signed with Developer ID, notarizes and staples both the app and the DMG, and checks the result with Gatekeeper. It prints the DMG path, SHA-256 and size for the download page.
 
+It writes two identical files, `Glance-<version>.dmg` and `Glance.dmg`; attach both to the GitHub release. The unversioned one gives the landing page a download link that never changes: `https://github.com/glanceapphq/glanceapp/releases/latest/download/Glance.dmg`.
+
 One-time setup: a **Developer ID Application** certificate in your keychain, and a stored notarization profile:
 
 ```sh

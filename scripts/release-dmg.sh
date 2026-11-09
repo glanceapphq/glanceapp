@@ -10,7 +10,9 @@
 #   xcrun notarytool store-credentials glance-notary --apple-id <Apple ID> --team-id 59MJ8J2KF3
 # Override the profile name with NOTARY_PROFILE=<name>.
 #
-# Output: build/release/Glance-<version>.dmg
+# Output: build/release/Glance-<version>.dmg, plus an identical Glance.dmg. Attach both to the
+# GitHub release: the unversioned one gives the landing page a link that never changes,
+#   https://github.com/glanceapphq/glanceapp/releases/latest/download/Glance.dmg
 
 set -euo pipefail
 
@@ -72,6 +74,7 @@ INFO="$ARCHIVE/Products/Applications/$APP_NAME.app/Contents/Info.plist"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$INFO")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$INFO")"
 DMG="$OUT/$APP_NAME-$VERSION.dmg"
+LATEST_DMG="$OUT/$APP_NAME.dmg"
 echo "$APP_NAME $VERSION ($BUILD)"
 
 step "Exporting with Developer ID"
@@ -140,8 +143,12 @@ if $notarize; then
     spctl --assess --type execute --verbose=2 "$APP"
 fi
 
+# Copied last, so it includes the stapled notarization ticket.
+cp "$DMG" "$LATEST_DMG"
+
 step "Done"
 echo "$DMG"
+echo "$LATEST_DMG (same file, for the stable download link)"
 echo "SHA-256: $(shasum -a 256 "$DMG" | cut -d ' ' -f 1)"
 echo "Size: $(du -h "$DMG" | cut -f 1)"
 $notarize || echo "Not notarized: other Macs will refuse to open it. Run without --skip-notarize for a release."
