@@ -170,12 +170,14 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
             if request.id != textFieldID {
                 removeTextField()
-                textField = makeTextField(text: request.text, fontSize: request.fontSize, in: documentView)
+                textField = makeTextField(text: request.text, fontSize: request.fontSize, color: color, in: documentView)
                 textFieldID = request.id
             }
 
             guard let field = textField else { return }
-            field.textColor = color
+            if field.textColor != color {
+                setColor(color, of: field)
+            }
             // Compensate for the field's internal inset so typed text lines up with the rendered annotation.
             field.setFrameOrigin(CGPoint(x: request.origin.x - 2, y: request.origin.y))
         }
@@ -187,9 +189,16 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
             textFieldID = nil
         }
 
-        private func makeTextField(text: String, fontSize: CGFloat, in documentView: NSView) -> NSTextField {
+        private func makeTextField(text: String, fontSize: CGFloat, color: NSColor, in documentView: NSView) -> NSTextField {
             let field = NSTextField(string: text)
             field.font = .systemFont(ofSize: fontSize, weight: .bold)
+            field.textColor = color
+            // Same shadow as rendered annotations, so white text stays readable on light backgrounds.
+            let shadow = NSShadow()
+            shadow.shadowColor = .black.withAlphaComponent(0.3)
+            shadow.shadowBlurRadius = 2
+            shadow.shadowOffset = CGSize(width: 0, height: -1)
+            field.shadow = shadow
             field.isBordered = false
             field.drawsBackground = false
             field.focusRingType = .none
@@ -203,9 +212,20 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
             // Added last so it sits above the input view and receives clicks.
             documentView.addSubview(field)
             documentView.window?.makeFirstResponder(field)
+            setColor(color, of: field)
             // Becoming first responder selects everything; put the caret at the end instead.
             field.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
             return field
+        }
+
+        /// While editing, the text is drawn by the window's shared field editor, which keeps its own
+        /// colors (white in dark mode), so the annotation color has to be applied there too.
+        private func setColor(_ color: NSColor, of field: NSTextField) {
+            field.textColor = color
+            guard let editor = field.currentEditor() as? NSTextView else { return }
+            editor.textColor = color
+            editor.insertionPointColor = color
+            editor.typingAttributes[.foregroundColor] = color
         }
 
         func controlTextDidChange(_ notification: Notification) {
