@@ -6,9 +6,8 @@ Texts to paste into App Store Connect for Glance. Limits are App Store Connect's
 
 | Field | Value |
 |---|---|
-| Name (30) | Glance |
-| Name if "Glance" is taken | Glance: Screenshot & Markup |
-| Subtitle (30) | Beautiful screenshots, fast |
+| Name (30) | Glance – Screenshot Tool |
+| Subtitle (30) | Capture, mark up & share |
 | Bundle ID | com.eugenekwasny.glance |
 | SKU | glance-mac |
 | Primary category | Utilities |
@@ -66,7 +65,9 @@ Native Swift app built with ScreenCaptureKit, SwiftUI and AppKit. It lives in yo
 
 ## Keywords (100)
 
-screenshot,screen capture,annotate,markup,snip,capture,arrow,pixelate,blur,clipboard,share,mockup
+Words already in the name and subtitle are indexed on their own, so they aren't repeated here.
+
+screen capture,markup,annotate,snip,snipping,screen grab,arrow,highlight,pixelate,blur,clipboard
 
 ## What's New (first version)
 
