@@ -37,6 +37,18 @@ final class SelectionTests: XCTestCase {
         XCTAssertNil(model.snappedX)
     }
 
+    func testGlobalPointsMapToTheScreenUnderThem() {
+        // A main 1440×900 screen and a second one above-left of it (AppKit global coordinates, bottom-left origin).
+        let main = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let second = CGRect(x: -1920, y: 900, width: 1920, height: 1080)
+
+        XCTAssertEqual(SelectionOverlayController.localPoint(CGPoint(x: 100, y: 800), inScreenWithFrame: main), CGPoint(x: 100, y: 100))
+        XCTAssertNil(SelectionOverlayController.localPoint(CGPoint(x: 100, y: 800), inScreenWithFrame: second))
+
+        XCTAssertEqual(SelectionOverlayController.localPoint(CGPoint(x: -1820, y: 1880), inScreenWithFrame: second), CGPoint(x: 100, y: 100))
+        XCTAssertNil(SelectionOverlayController.localPoint(CGPoint(x: -1820, y: 1880), inScreenWithFrame: main))
+    }
+
     func testCropUsesTopLeftPoints() throws {
         // 400×240 pt at 2x, red exactly at (10, 20, 100, 50) pt in top-left coordinates.
         let image = TestImage.make(width: 800, height: 480) { context in

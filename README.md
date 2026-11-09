@@ -25,16 +25,17 @@
 
 **Area, window or full screen — one shortcut each.**
 
-- **Area capture (⇧⌘1)** — drag to select any region of the screen.
+- **Area capture (⇧⌘1)** — drag to select any region, on any of your displays.
 - **Window capture (⇧⌘1, then click)** — hover a window to highlight it, click to capture it. The window is captured *on its own*: even parts hidden behind other windows are included, corners stay transparent, and there's no desktop clutter behind it.
 - **Full-screen capture (⇧⌘2)** — the whole display under your pointer, in one keystroke.
+- **Multiple displays** — every display is frozen and selectable at once; the editor opens on the display you captured.
 - **Works from anywhere** — it lives in the menu bar, with no Dock icon and no windows in your way.
 
 ### Selection that respects your pixels
 
 **Frame exactly what you mean.**
 
-- **Frozen screen** — the moment you press the shortcut, the screen is frozen. Open menus, tooltips and hover effects stay exactly as they were while you select, and end up in the capture.
+- **Frozen screen** — the moment you press the shortcut, every screen is frozen. Open menus, tooltips and hover effects stay exactly as they were while you select, and end up in the capture.
 - **Magnifier loupe** — a zoomed-in view of the pixels under your pointer (21×21 px at 6×), with the exact pixel outlined and its coordinates shown.
 - **Crosshair guides** — full-screen guide lines through the pointer help you line things up.
 - **Smart snapping** — selection edges snap to window and screen edges. Hold **⌥ Option** for free-hand precision.
@@ -200,4 +201,4 @@ Design notes:
 
 ## Roadmap
 
-- [ ] Area selection across multiple displays
+- [ ] Selections spanning more than one display

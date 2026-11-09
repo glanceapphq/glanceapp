@@ -23,17 +23,26 @@ final class CaptureCoordinator {
         self.history = history
     }
 
+    /// Lets the user pick an area or a window on any screen.
     func captureArea() {
-        guard !isBusy, permissions.ensureScreenRecordingAccess(), let screen = NSScreen.underMouse else { return }
+        let screens = NSScreen.screens
+        guard !isBusy, permissions.ensureScreenRecordingAccess(), !screens.isEmpty else { return }
         isBusy = true
 
-        // Snapshot the window list before the overlay appears, so it isn't in the list.
-        let windows = captureService.selectableWindows(on: screen)
+        // Snapshot the window lists before the overlays appear, so they aren't in the lists.
+        let windows = screens.map { captureService.selectableWindows(on: $0) }
         Task {
             do {
-                // Freeze the screen first: the overlay shows this image and areas are cut out of it.
-                let frozenScreen = try await captureService.captureScreen(screen)
-                beginSelection(on: screen, frozenScreen: frozenScreen, windows: windows)
+                // Freeze every screen first: the overlays show these images and areas are cut out of them.
+                // Start all captures before awaiting any, so they run side by side.
+                let captures = screens.map { screen in
+                    Task { try await self.captureService.captureScreen(screen) }
+                }
+                var targets: [SelectionScreen] = []
+                for (index, screen) in screens.enumerated() {
+                    targets.append(SelectionScreen(screen: screen, frozenScreen: try await captures[index].value, windows: windows[index]))
+                }
+                beginSelection(on: targets)
             } catch {
                 fail(with: error)
             }
@@ -61,27 +70,29 @@ final class CaptureCoordinator {
 
     // MARK: - Private
 
-    private func beginSelection(on screen: NSScreen, frozenScreen: Screenshot, windows: [SelectableWindow]) {
-        let selection = SelectionOverlayController(screen: screen)
+    private func beginSelection(on screens: [SelectionScreen]) {
+        let selection = SelectionOverlayController()
         self.selection = selection
-        selection.begin(frozenScreen: frozenScreen, windows: windows) { [weak self] result in
+        selection.begin(on: screens) { [weak self] pick in
             guard let self else { return }
+            guard let (target, result) = pick else {
+                endCapture()
+                return
+            }
 
             switch result {
             case .area(let rect):
                 Task {
-                    await self.perform(on: screen) {
-                        guard let cropped = frozenScreen.cropped(to: rect) else { throw CaptureError.cropFailed }
+                    await self.perform(on: target.screen) {
+                        guard let cropped = target.frozenScreen.cropped(to: rect) else { throw CaptureError.cropFailed }
                         return cropped
                     }
                 }
             case .window(let windowID):
                 // Captured live rather than cropped, so parts hidden behind other windows are included.
                 Task {
-                    await self.perform(on: screen) { try await self.captureService.captureWindow(windowID) }
+                    await self.perform(on: target.screen) { try await self.captureService.captureWindow(windowID) }
                 }
-            case nil:
-                endCapture()
             }
         }
     }
