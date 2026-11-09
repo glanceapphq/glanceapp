@@ -199,6 +199,18 @@ Design notes:
 - **Canvas input is handled in AppKit** (`CanvasInputView`), because SwiftUI gestures report wrong locations inside a magnified `NSScrollView`.
 - **Global hot keys use Carbon `RegisterEventHotKey`**: no Accessibility permission needed, and the key press isn't leaked to the frontmost app.
 
+### Releasing a DMG
+
+`scripts/release-dmg.sh` archives the app, exports it signed with Developer ID, notarizes and staples both the app and the DMG, and checks the result with Gatekeeper. It prints the DMG path, SHA-256 and size for the download page.
+
+One-time setup: a **Developer ID Application** certificate in your keychain, and a stored notarization profile:
+
+```sh
+xcrun notarytool store-credentials glance-notary --apple-id <Apple ID> --team-id 59MJ8J2KF3
+```
+
+Bump **Version** / **Build** in the target settings before each release. `--skip-notarize` makes a quick local DMG that other Macs won't open.
+
 ## Roadmap
 
 - [ ] Selections spanning more than one display
