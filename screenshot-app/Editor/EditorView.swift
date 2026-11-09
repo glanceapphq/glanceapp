@@ -28,9 +28,10 @@ struct EditorView: View {
                     zoomToFitRequest: model.zoomToFitRequest,
                     // Always capture the mouse so annotations can be selected even without a tool.
                     cursor: model.activeTool?.cursor ?? .arrow,
+                    cursorRects: handleCursorRects,
                     onDrag: model.handleCanvasDrag,
                     textField: model.textFieldRequest,
-                    textColor: NSColor(model.annotationColor.color),
+                    textColor: NSColor(model.textEditingColor.color),
                     onTextCommit: model.commitText
                 ) {
                     CompositionView(model: model)
@@ -47,6 +48,17 @@ struct EditorView: View {
         .overlay {
             RoundedRectangle(cornerRadius: Self.cornerRadius)
                 .strokeBorder(.separator)
+        }
+    }
+
+    /// Resize cursors over the selected annotation's handles, in canvas space.
+    private var handleCursorRects: [CanvasCursorRect] {
+        let size = 14 / max(model.zoom, 0.01)
+        return model.selectionHandles.map { handle, point in
+            CanvasCursorRect(
+                rect: CGRect(x: point.x + model.padding - size / 2, y: point.y + model.padding - size / 2, width: size, height: size),
+                cursor: handle.cursor
+            )
         }
     }
 }
@@ -187,24 +199,50 @@ private extension EditorTool {
     }
 }
 
-/// Dashed frame around the selected annotation. Editor-only: not part of `CompositionView`, so never exported.
+private extension AnnotationHandle {
+    var cursor: NSCursor {
+        switch self {
+        case .start, .end: .crosshair
+        case .topLeft: .frameResize(position: .topLeft, directions: .all)
+        case .top: .frameResize(position: .top, directions: .all)
+        case .topRight: .frameResize(position: .topRight, directions: .all)
+        case .right: .frameResize(position: .right, directions: .all)
+        case .bottomRight: .frameResize(position: .bottomRight, directions: .all)
+        case .bottom: .frameResize(position: .bottom, directions: .all)
+        case .bottomLeft: .frameResize(position: .bottomLeft, directions: .all)
+        case .left: .frameResize(position: .left, directions: .all)
+        }
+    }
+}
+
+/// Dashed frame and resize handles of the selected annotation.
+/// Editor-only: not part of `CompositionView`, so never exported.
 private struct SelectionFrame: View {
     let model: EditorModel
 
     var body: some View {
-        if let annotation = model.selectedAnnotation {
-            // Keep the frame's line weight constant on screen at any zoom.
-            let scale = 1 / max(model.zoom, 0.01)
-            let rect = annotation.bounds
-                .insetBy(dx: -4 * scale, dy: -4 * scale)
-                .offsetBy(dx: model.padding, dy: model.padding)
+        // Keep line weights and handle sizes constant on screen at any zoom.
+        let scale = 1 / max(model.zoom, 0.01)
+        let handleSize = 8 * scale
 
-            Rectangle()
-                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5 * scale, dash: [4 * scale, 3 * scale]))
-                .frame(width: rect.width, height: rect.height)
-                .offset(x: rect.minX, y: rect.minY)
-                .allowsHitTesting(false)
+        ZStack(alignment: .topLeading) {
+            if let frame = model.selectionFrame?.offsetBy(dx: model.padding, dy: model.padding) {
+                Rectangle()
+                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5 * scale, dash: [4 * scale, 3 * scale]))
+                    .frame(width: frame.width, height: frame.height)
+                    .offset(x: frame.minX, y: frame.minY)
+            }
+
+            ForEach(Array(model.selectionHandles.enumerated()), id: \.offset) { _, handle in
+                Circle()
+                    .fill(.white)
+                    .stroke(Color.accentColor, lineWidth: 1.5 * scale)
+                    .shadow(color: .black.opacity(0.25), radius: scale)
+                    .frame(width: handleSize, height: handleSize)
+                    .offset(x: handle.point.x + model.padding - handleSize / 2, y: handle.point.y + model.padding - handleSize / 2)
+            }
         }
+        .allowsHitTesting(false)
     }
 }
 

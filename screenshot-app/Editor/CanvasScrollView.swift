@@ -3,7 +3,8 @@ import SwiftUI
 
 /// A mouse drag on the canvas, in canvas coordinates (points, top-left origin).
 enum CanvasDrag {
-    case began(location: CGPoint)
+    /// `clickCount` is 2 for the second press of a double-click.
+    case began(location: CGPoint, clickCount: Int)
     case changed(start: CGPoint, location: CGPoint, isConstrained: Bool)
     case ended
 }
@@ -14,6 +15,15 @@ struct CanvasTextFieldRequest {
     let id: UUID
     /// Top-left of the text, in canvas space.
     let origin: CGPoint
+    /// Text the field starts with.
+    let text: String
+    let fontSize: CGFloat
+}
+
+/// An area of the canvas (in canvas space) that shows its own cursor, such as a resize handle.
+struct CanvasCursorRect: Equatable {
+    let rect: CGRect
+    let cursor: NSCursor
 }
 
 /// Hosts SwiftUI content in an `NSScrollView` to get native zoom and pan:
@@ -28,6 +38,8 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
     let zoomToFitRequest: Int
     /// Cursor over the canvas while a tool is active; `nil` lets the mouse pass through.
     let cursor: NSCursor?
+    /// Areas that override `cursor`, e.g. resize handles.
+    let cursorRects: [CanvasCursorRect]
     let onDrag: (CanvasDrag) -> Void
     /// The text field to show, or `nil` when not editing text.
     let textField: CanvasTextFieldRequest?
@@ -78,6 +90,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
         coordinator.hostingView?.rootView = content
         coordinator.inputView?.cursor = cursor
+        coordinator.inputView?.cursorRects = cursorRects
         coordinator.inputView?.onDrag = onDrag
         coordinator.onTextCommit = onTextCommit
 
@@ -157,7 +170,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
             if request.id != textFieldID {
                 removeTextField()
-                textField = makeTextField(in: documentView)
+                textField = makeTextField(text: request.text, fontSize: request.fontSize, in: documentView)
                 textFieldID = request.id
             }
 
@@ -174,9 +187,9 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
             textFieldID = nil
         }
 
-        private func makeTextField(in documentView: NSView) -> NSTextField {
-            let field = NSTextField(string: "")
-            field.font = .systemFont(ofSize: TextAnnotation.fontSize, weight: .bold)
+        private func makeTextField(text: String, fontSize: CGFloat, in documentView: NSView) -> NSTextField {
+            let field = NSTextField(string: text)
+            field.font = .systemFont(ofSize: fontSize, weight: .bold)
             field.isBordered = false
             field.drawsBackground = false
             field.focusRingType = .none
@@ -185,11 +198,13 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
             field.cell?.isScrollable = true
             field.delegate = self
             field.sizeToFit()
-            field.setFrameSize(CGSize(width: max(field.frame.width, 80), height: field.frame.height))
+            field.setFrameSize(CGSize(width: max(field.frame.width + 8, 80), height: field.frame.height))
 
             // Added last so it sits above the input view and receives clicks.
             documentView.addSubview(field)
             documentView.window?.makeFirstResponder(field)
+            // Becoming first responder selects everything; put the caret at the end instead.
+            field.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
             return field
         }
 
@@ -244,11 +259,20 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
 /// Transparent view over the canvas that turns mouse drags into `CanvasDrag` events.
 /// With no cursor set (no active tool) it ignores the mouse entirely, letting events pass through.
+///
+/// Cursors are set from mouse tracking rather than cursor rects, because cursor rects
+/// may not overlap and handle areas sit on top of the canvas-wide cursor.
 final class CanvasInputView: NSView {
     var cursor: NSCursor? {
         didSet {
             guard cursor !== oldValue else { return }
-            window?.invalidateCursorRects(for: self)
+            updateCursor()
+        }
+    }
+    var cursorRects: [CanvasCursorRect] = [] {
+        didSet {
+            guard cursorRects != oldValue else { return }
+            updateCursor()
         }
     }
     var onDrag: ((CanvasDrag) -> Void)?
@@ -263,10 +287,29 @@ final class CanvasInputView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func resetCursorRects() {
-        if let cursor {
-            addCursorRect(bounds, cursor: cursor)
-        }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(at: location(of: event))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(at: location(of: event))
+    }
+
+    /// Sets the cursor for the pointer's current position. Keeps the cursor while dragging,
+    /// so a resize cursor stays put even when the pointer runs ahead of the handle.
+    private func updateCursor(at point: CGPoint? = nil) {
+        guard dragStart == nil, let window else { return }
+        let point = point ?? convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        // The inline text field sits on top and shows its own I-beam.
+        let overTextField = superview?.subviews.contains { $0 is NSTextField && $0.frame.contains(point) } ?? false
+        guard bounds.contains(point), !overTextField, let cursor else { return }
+        (cursorRects.last { $0.rect.contains(point) }?.cursor ?? cursor).set()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -278,7 +321,7 @@ final class CanvasInputView: NSView {
 
         let location = location(of: event)
         dragStart = location
-        onDrag?(.began(location: location))
+        onDrag?(.began(location: location, clickCount: event.clickCount))
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -290,6 +333,7 @@ final class CanvasInputView: NSView {
         guard dragStart != nil else { return }
         dragStart = nil
         onDrag?(.ended)
+        updateCursor()
     }
 
     /// Event location in this view's coordinates, i.e. canvas points regardless of magnification.

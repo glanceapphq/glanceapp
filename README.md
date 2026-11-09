@@ -57,13 +57,15 @@
 |---|---|---|
 | ↗ Arrow | **A** | Point at things. Smooth, tapered arrows; hold **Shift** to snap to 45°. |
 | ▭ Rectangle | **R** | Box an area. Hold **Shift** for a square. |
-| **T** Text | **T** | Add a label. Click, type, press Enter. |
+| **T** Text | **T** | Add a label. Click, type, press Enter. Double-click a label to edit it. |
 | ① Counter | **N** | Number the steps in a flow — each click adds the next number. |
 | ▦ Pixelate | **P** | Hide emails, names, tokens and other sensitive data. |
 
 - **6 colours** — red, orange, yellow, green, blue, white.
 - **Edit after drawing** — click any annotation to select it, drag to move (**Shift** locks the axis), **⌫** to delete, or pick a colour to recolour it.
-- **Full undo/redo** (⌘Z / ⇧⌘Z) for every change: adding, moving, recolouring, deleting.
+- **Resize handles** — drag an arrow's ends, a box's corners and edges, or the corner of a label or number badge to scale it. **Shift** keeps 45° angles and squares.
+- **Double-click to edit text** — fix a typo in place; clear the text to remove the label.
+- **Full undo/redo** (⌘Z / ⇧⌘Z) for every change: adding, moving, resizing, editing, recolouring, deleting.
 - **Real pixelation** — each block is the *average* of the pixels beneath it, so text becomes genuinely unreadable instead of flickering through.
 
 ### Zoom in on the details
@@ -122,7 +124,8 @@ Both can be changed in **Settings → Shortcuts**.
 | Shortcut | Action |
 |---|---|
 | A · R · T · N · P | Arrow · Rectangle · Text · Counter · Pixelate |
-| Shift (while drawing) | 45° arrows · square rectangles · axis-locked moves |
+| Shift (while drawing or resizing) | 45° arrows · square rectangles · axis-locked moves |
+| Double-click text | Edit the label |
 | ⌫ | Delete selected annotation |
 | ⌘Z / ⇧⌘Z | Undo / Redo |
 | ⌘C | Copy to clipboard and close |
@@ -186,6 +189,5 @@ Design notes:
 
 ## Roadmap
 
-- [ ] Resize handles for annotations; double-click to edit text
 - [ ] Capture history in the menu bar
 - [ ] Unit tests (XCTest target)

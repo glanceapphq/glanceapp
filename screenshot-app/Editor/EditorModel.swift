@@ -27,8 +27,8 @@ final class EditorModel {
     // History holds snapshots of `annotations`, so every kind of change undoes the same way.
     private var undoStack: [[Annotation]] = []
     private var redoStack: [[Annotation]] = []
-    /// In-progress move of the selected annotation.
-    @ObservationIgnored private var move: MoveState?
+    /// In-progress move or resize of the selected annotation.
+    @ObservationIgnored private var annotationDrag: AnnotationDrag?
 
     /// Text currently being typed, or `nil` when not editing text.
     private(set) var textEditing: TextEditingSession?
@@ -77,9 +77,11 @@ final class EditorModel {
 
     // MARK: Annotations
 
-    /// Committed annotations plus the one being drawn.
+    /// Committed annotations plus the one being drawn, minus text being re-edited
+    /// (the text field shows it instead).
     var visibleAnnotations: [Annotation] {
-        annotations + [draft].compactMap { $0 }
+        let editingID = textEditing?.annotationID
+        return annotations.filter { $0.id != editingID } + [draft].compactMap { $0 }
     }
 
     /// Areas to pixelate, in screenshot space.
@@ -103,7 +105,19 @@ final class EditorModel {
 
     /// Where the canvas should show its text field, in canvas space.
     var textFieldRequest: CanvasTextFieldRequest? {
-        textEditing.map { CanvasTextFieldRequest(id: $0.id, origin: CGPoint(x: $0.origin.x + padding, y: $0.origin.y + padding)) }
+        textEditing.map {
+            CanvasTextFieldRequest(
+                id: $0.id,
+                origin: CGPoint(x: $0.origin.x + padding, y: $0.origin.y + padding),
+                text: $0.text,
+                fontSize: $0.fontSize
+            )
+        }
+    }
+
+    /// Color of the text being typed.
+    var textEditingColor: AnnotationColor {
+        textEditing?.color ?? annotationColor
     }
 
     var selectedAnnotation: Annotation? {
@@ -111,19 +125,49 @@ final class EditorModel {
     }
 
     var hasSelection: Bool { selectedAnnotation != nil }
+
+    /// Gap between an annotation and its selection frame; constant on screen at any zoom.
+    var selectionOutset: CGFloat { 4 / max(zoom, 0.01) }
+
+    /// Selection frame around the selected annotation in screenshot space, or `nil`
+    /// for arrows, which show only their endpoint handles.
+    var selectionFrame: CGRect? {
+        guard let annotation = selectedAnnotation else { return nil }
+        if case .arrow = annotation { return nil }
+        return annotation.bounds.insetBy(dx: -selectionOutset, dy: -selectionOutset)
+    }
+
+    /// Resize handles of the selected annotation and where they are, in screenshot space.
+    var selectionHandles: [(handle: AnnotationHandle, point: CGPoint)] {
+        guard let annotation = selectedAnnotation else { return [] }
+        if case .arrow(let arrow) = annotation {
+            return [(.start, arrow.start), (.end, arrow.end)]
+        }
+        guard let frame = selectionFrame else { return [] }
+        return annotation.handles.map { ($0, frame.point(for: $0)) }
+    }
     var hasAnnotations: Bool { !annotations.isEmpty }
 
     /// Applies a mouse interaction on the canvas.
     ///
-    /// Pressing on an existing annotation selects it and dragging moves it; pressing
-    /// on empty space clears the selection and uses the active tool.
+    /// Dragging a handle of the selected annotation resizes it. Pressing on an existing
+    /// annotation selects it and dragging moves it; double-clicking text edits it.
+    /// Pressing on empty space clears the selection and uses the active tool.
     func handleCanvasDrag(_ drag: CanvasDrag) {
         switch drag {
-        case .began(let location):
+        case let .began(location, clickCount):
             let point = toScreenshotSpace(location)
+            if let selected = selectedAnnotation, let handle = handle(at: point) {
+                annotationDrag = AnnotationDrag(original: selected, handle: handle, start: point, snapshot: annotations)
+                return
+            }
             if let hit = annotation(at: point) {
+                if clickCount >= 2, case .text(let text) = hit {
+                    beginEditing(text)
+                    return
+                }
                 selectedAnnotationID = hit.id
-                move = MoveState(original: hit, start: point, snapshot: annotations)
+                annotationDrag = AnnotationDrag(original: hit, handle: nil, start: point, snapshot: annotations)
                 return
             }
             selectedAnnotationID = nil
@@ -132,14 +176,14 @@ final class EditorModel {
             case .counter:
                 addAnnotation(.counter(CounterAnnotation(center: point, number: nextCounterNumber, color: annotationColor)))
             case .text:
-                textEditing = TextEditingSession(origin: point)
+                textEditing = TextEditingSession(origin: point, color: annotationColor)
             case .arrow, .rectangle, .pixelate, nil:
                 break
             }
 
         case let .changed(start, location, isConstrained):
-            if move != nil {
-                moveSelection(to: toScreenshotSpace(location), alongAxis: isConstrained)
+            if annotationDrag != nil {
+                dragSelection(to: toScreenshotSpace(location), isConstrained: isConstrained)
                 return
             }
 
@@ -158,10 +202,10 @@ final class EditorModel {
             }
 
         case .ended:
-            if let move {
-                self.move = nil
-                if move.didMove {
-                    recordHistory(move.snapshot)
+            if let annotationDrag {
+                self.annotationDrag = nil
+                if annotationDrag.didChange {
+                    recordHistory(annotationDrag.snapshot)
                 }
                 return
             }
@@ -173,14 +217,31 @@ final class EditorModel {
         }
     }
 
-    /// Finishes text editing, adding the text unless it's blank.
+    /// Finishes text editing. New text is added unless it's blank; edited text is
+    /// updated, or deleted when cleared.
     func commitText(_ text: String) {
-        guard let origin = textEditing?.origin else { return }
+        guard let session = textEditing else { return }
         textEditing = nil
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        addAnnotation(.text(TextAnnotation(origin: origin, text: trimmed, color: annotationColor)))
+
+        guard let id = session.annotationID else {
+            guard !trimmed.isEmpty else { return }
+            addAnnotation(.text(TextAnnotation(origin: session.origin, text: trimmed, color: session.color, fontSize: session.fontSize)))
+            return
+        }
+
+        guard let index = annotations.firstIndex(where: { $0.id == id }), case .text(var edited) = annotations[index] else { return }
+        if trimmed.isEmpty {
+            change { $0.remove(at: index) }
+            return
+        }
+
+        selectedAnnotationID = id
+        guard trimmed != edited.text || session.color != edited.color else { return }
+        edited.text = trimmed
+        edited.color = session.color
+        change { $0[index] = .text(edited) }
     }
 
     func addAnnotation(_ annotation: Annotation) {
@@ -200,6 +261,7 @@ final class EditorModel {
     /// Sets the color for new annotations and recolors the selected one.
     func selectColor(_ color: AnnotationColor) {
         annotationColor = color
+        textEditing?.color = color
 
         guard let selected = selectedAnnotation,
               let recolored = selected.recolored(color),
@@ -233,6 +295,21 @@ final class EditorModel {
         redoStack.removeAll()
     }
 
+    /// Starts editing an existing text annotation in place.
+    private func beginEditing(_ text: TextAnnotation) {
+        selectedAnnotationID = nil
+        textEditing = TextEditingSession(origin: text.origin, text: text.text, color: text.color, fontSize: text.fontSize, annotationID: text.id)
+    }
+
+    /// Handle of the selected annotation under `point`. Hit size stays constant on screen.
+    private func handle(at point: CGPoint) -> AnnotationHandle? {
+        let radius = 7 / zoom
+        return selectionHandles
+            .filter { hypot($0.point.x - point.x, $0.point.y - point.y) <= radius }
+            .min { hypot($0.point.x - point.x, $0.point.y - point.y) < hypot($1.point.x - point.x, $1.point.y - point.y) }?
+            .handle
+    }
+
     /// Topmost annotation under `point`. Hit slack stays constant on screen regardless of zoom.
     private func annotation(at point: CGPoint) -> Annotation? {
         let tolerance = 6 / zoom
@@ -241,18 +318,24 @@ final class EditorModel {
         return annotations.last { $0.contains(point, tolerance: tolerance, includeInterior: includeInterior) }
     }
 
-    private func moveSelection(to point: CGPoint, alongAxis: Bool) {
-        guard var move, let index = annotations.firstIndex(where: { $0.id == move.original.id }) else { return }
+    /// Moves the dragged annotation, or resizes it when a handle is being dragged.
+    /// `isConstrained` locks moves to an axis and constrains resizing (see `Annotation.resized`).
+    private func dragSelection(to point: CGPoint, isConstrained: Bool) {
+        guard var drag = annotationDrag, let index = annotations.firstIndex(where: { $0.id == drag.original.id }) else { return }
 
-        var offset = CGSize(width: point.x - move.start.x, height: point.y - move.start.y)
-        if alongAxis {
-            if abs(offset.width) > abs(offset.height) { offset.height = 0 } else { offset.width = 0 }
+        var offset = CGSize(width: point.x - drag.start.x, height: point.y - drag.start.y)
+
+        // Live update without history; the whole drag is recorded once when it ends.
+        if let handle = drag.handle {
+            annotations[index] = drag.original.resized(handle, by: offset, constrained: isConstrained)
+        } else {
+            if isConstrained {
+                if abs(offset.width) > abs(offset.height) { offset.height = 0 } else { offset.width = 0 }
+            }
+            annotations[index] = drag.original.offset(by: offset)
         }
-
-        // Live update without history; the whole move is recorded once when the drag ends.
-        annotations[index] = move.original.offset(by: offset)
-        move.didMove = move.didMove || offset != .zero
-        self.move = move
+        drag.didChange = drag.didChange || offset != .zero
+        annotationDrag = drag
     }
 
     private var nextCounterNumber: Int {
@@ -289,22 +372,31 @@ final class EditorModel {
     }
 }
 
-/// Dragging an existing annotation.
-private struct MoveState {
+/// Dragging an existing annotation: moving it, or resizing it by one of its handles.
+private struct AnnotationDrag {
     /// The annotation as it was when the drag started.
     let original: Annotation
+    /// The handle being dragged, or `nil` when moving.
+    let handle: AnnotationHandle?
     /// Where the drag started, in screenshot space.
     let start: CGPoint
-    /// Annotations before the move, recorded for undo if it actually moves.
+    /// Annotations before the drag, recorded for undo if it actually changes something.
     let snapshot: [Annotation]
-    var didMove = false
+    var didChange = false
 }
 
-/// One text-typing session; each click with the text tool starts a new one.
+/// One text-typing session: each click with the text tool starts a new one, and
+/// double-clicking existing text starts one that edits it.
 struct TextEditingSession {
     let id = UUID()
     /// Top-left of the text, in screenshot space.
     let origin: CGPoint
+    /// Text the field starts with.
+    var text = ""
+    var color: AnnotationColor
+    var fontSize = TextAnnotation.defaultFontSize
+    /// The text annotation being edited, or `nil` for new text.
+    var annotationID: UUID?
 }
 
 /// Background presets for the composition.

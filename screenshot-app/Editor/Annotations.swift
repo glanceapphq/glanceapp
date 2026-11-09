@@ -151,27 +151,34 @@ nonisolated struct RectangleAnnotation: Identifiable, Sendable {
 
 /// A single line of text whose top-left corner is at `origin`.
 nonisolated struct TextAnnotation: Identifiable, Sendable {
-    static let fontSize: CGFloat = 24
+    static let defaultFontSize: CGFloat = 24
+    static let fontSizeRange: ClosedRange<CGFloat> = 10...200
 
     let id = UUID()
     var origin: CGPoint
     var text: String
     var color: AnnotationColor
+    var fontSize: CGFloat = Self.defaultFontSize
 }
 
 /// A numbered badge centered at `center`, for marking steps.
 nonisolated struct CounterAnnotation: Identifiable, Sendable {
-    static let diameter: CGFloat = 28
+    static let defaultDiameter: CGFloat = 28
+    static let diameterRange: ClosedRange<CGFloat> = 16...200
 
     let id = UUID()
     var center: CGPoint
     var number: Int
     var color: AnnotationColor
+    var diameter: CGFloat = Self.defaultDiameter
 
     var circle: Path {
-        let radius = Self.diameter / 2
-        return Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: Self.diameter, height: Self.diameter))
+        let radius = diameter / 2
+        return Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: diameter, height: diameter))
     }
+
+    /// Font size of the number, proportional to the badge.
+    var fontSize: CGFloat { diameter * 15 / 28 }
 }
 
 /// An area of the screenshot hidden behind large pixels.
@@ -264,6 +271,58 @@ nonisolated extension Annotation {
         }
     }
 
+    /// Handles offered for resizing the annotation.
+    var handles: [AnnotationHandle] {
+        switch self {
+        case .arrow: [.start, .end]
+        case .rectangle, .pixelate: [.topLeft, .top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left]
+        case .text, .counter: [.bottomRight]
+        }
+    }
+
+    /// The same annotation after dragging `handle` by `offset`.
+    ///
+    /// Works from the drag offset rather than the pointer location, so grabbing a handle
+    /// slightly off its center doesn't make the shape jump.
+    ///
+    /// - Parameter constrained: Snaps arrows to 45° and keeps rectangles square (corner handles only).
+    func resized(_ handle: AnnotationHandle, by offset: CGSize, constrained: Bool) -> Annotation {
+        switch self {
+        case .arrow(var arrow):
+            func moved(_ point: CGPoint, around anchor: CGPoint) -> CGPoint {
+                let point = CGPoint(x: point.x + offset.width, y: point.y + offset.height)
+                return constrained ? ArrowAnnotation.snappedEnd(from: anchor, to: point) : point
+            }
+            switch handle {
+            case .start: arrow.start = moved(arrow.start, around: arrow.end)
+            case .end: arrow.end = moved(arrow.end, around: arrow.start)
+            default: break
+            }
+            return .arrow(arrow)
+
+        case .rectangle(var rectangle):
+            rectangle.rect = rectangle.rect.resized(handle, by: offset, square: constrained)
+            return .rectangle(rectangle)
+
+        case .pixelate(var pixelate):
+            pixelate.rect = pixelate.rect.resized(handle, by: offset, square: constrained)
+            return .pixelate(pixelate)
+
+        case .text(var text):
+            // Scale the font so the text's corner follows the pointer.
+            let size = text.size
+            guard size.width > 0, size.height > 0 else { return self }
+            let ratio = max((size.width + offset.width) / size.width, (size.height + offset.height) / size.height)
+            text.fontSize = (text.fontSize * ratio).clamped(to: TextAnnotation.fontSizeRange)
+            return .text(text)
+
+        case .counter(var counter):
+            // The badge grows around its center, so the corner moves by the change in radius.
+            counter.diameter = (counter.diameter + 2 * max(offset.width, offset.height)).clamped(to: CounterAnnotation.diameterRange)
+            return .counter(counter)
+        }
+    }
+
     private static func outline(_ rect: CGRect, contains point: CGPoint, halfWidth: CGFloat, includeInterior: Bool) -> Bool {
         let outer = rect.insetBy(dx: -halfWidth, dy: -halfWidth)
         guard outer.contains(point) else { return false }
@@ -273,10 +332,18 @@ nonisolated extension Annotation {
     }
 }
 
+/// A point on an annotation that can be dragged to resize it.
+nonisolated enum AnnotationHandle: Sendable {
+    /// Arrow endpoints.
+    case start, end
+    /// Points on the selection frame.
+    case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
+}
+
 nonisolated extension TextAnnotation {
     /// Rendered size of the text (bold system font, matching `AnnotationLayer`).
     var size: CGSize {
-        let font = NSFont.systemFont(ofSize: Self.fontSize, weight: .bold)
+        let font = NSFont.systemFont(ofSize: fontSize, weight: .bold)
         return (text as NSString).size(withAttributes: [.font: font])
     }
 }
@@ -308,6 +375,48 @@ extension CGRect {
     }
 }
 
+nonisolated extension CGRect {
+    /// Position of a frame handle on this rectangle.
+    func point(for handle: AnnotationHandle) -> CGPoint {
+        switch handle {
+        case .topLeft: CGPoint(x: minX, y: minY)
+        case .top: CGPoint(x: midX, y: minY)
+        case .topRight: CGPoint(x: maxX, y: minY)
+        case .right: CGPoint(x: maxX, y: midY)
+        case .bottomRight: CGPoint(x: maxX, y: maxY)
+        case .bottom: CGPoint(x: midX, y: maxY)
+        case .bottomLeft: CGPoint(x: minX, y: maxY)
+        case .left: CGPoint(x: minX, y: midY)
+        case .start, .end: CGPoint(x: midX, y: midY)
+        }
+    }
+
+    /// The rectangle with the edges under `handle` moved by `offset`. Dragging past the
+    /// opposite edge flips it; `square` keeps corner drags square.
+    func resized(_ handle: AnnotationHandle, by offset: CGSize, square: Bool) -> CGRect {
+        var left = minX, right = maxX, top = minY, bottom = maxY
+
+        switch handle {
+        case .topLeft, .left, .bottomLeft: left += offset.width
+        case .topRight, .right, .bottomRight: right += offset.width
+        default: break
+        }
+        switch handle {
+        case .topLeft, .top, .topRight: top += offset.height
+        case .bottomLeft, .bottom, .bottomRight: bottom += offset.height
+        default: break
+        }
+
+        switch handle {
+        case .topLeft: return CGRect(corner: CGPoint(x: maxX, y: maxY), to: CGPoint(x: left, y: top), square: square)
+        case .topRight: return CGRect(corner: CGPoint(x: minX, y: maxY), to: CGPoint(x: right, y: top), square: square)
+        case .bottomRight: return CGRect(corner: CGPoint(x: minX, y: minY), to: CGPoint(x: right, y: bottom), square: square)
+        case .bottomLeft: return CGRect(corner: CGPoint(x: maxX, y: minY), to: CGPoint(x: left, y: bottom), square: square)
+        default: return CGRect(corner: CGPoint(x: left, y: top), to: CGPoint(x: right, y: bottom))
+        }
+    }
+}
+
 // MARK: - Rendering
 
 /// Draws vector annotations (everything except pixelation) over the composition.
@@ -331,14 +440,14 @@ struct AnnotationLayer: View {
 
                 case .text(let text):
                     let label = Text(text.text)
-                        .font(.system(size: TextAnnotation.fontSize, weight: .bold))
+                        .font(.system(size: text.fontSize, weight: .bold))
                         .foregroundStyle(text.color.color)
                     context.draw(label, at: text.origin, anchor: .topLeading)
 
                 case .counter(let counter):
                     context.fill(counter.circle, with: .color(counter.color.color))
                     let label = Text("\(counter.number)")
-                        .font(.system(size: 15, weight: .bold).monospacedDigit())
+                        .font(.system(size: counter.fontSize, weight: .bold).monospacedDigit())
                         .foregroundStyle(counter.color.contrastingColor)
                     context.draw(label, at: counter.center, anchor: .center)
 
