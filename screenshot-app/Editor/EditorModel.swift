@@ -34,17 +34,22 @@ final class EditorModel {
     private(set) var textEditing: TextEditingSession?
 
     @ObservationIgnored private var pixelatedCache: CGImage?
+    /// Where styling is remembered.
+    @ObservationIgnored private let preferencesStore: UserDefaults
 
     /// Canvas magnification; `1` shows the screenshot at its native point size.
     var zoom: CGFloat = 1
     /// Incremented to ask the canvas to fit itself into the visible area.
     private(set) var zoomToFitRequest = 0
 
-    /// - Parameter document: Earlier edits to restore, e.g. when reopening from history;
-    ///   `nil` starts with no annotations and the remembered style.
-    init(screenshot: Screenshot, document: EditorDocument? = nil, preferences: EditorPreferences = .load()) {
-        let preferences = document?.preferences ?? preferences
+    /// - Parameters:
+    ///   - document: Earlier edits to restore, e.g. when reopening from history;
+    ///     `nil` starts with no annotations and the remembered style.
+    ///   - preferencesStore: Where styling is remembered between screenshots.
+    init(screenshot: Screenshot, document: EditorDocument? = nil, preferencesStore: UserDefaults = .standard) {
+        let preferences = document?.preferences ?? .load(from: preferencesStore)
         self.screenshot = screenshot
+        self.preferencesStore = preferencesStore
         self.padding = preferences.padding
         self.cornerRadius = preferences.cornerRadius
         self.background = preferences.background
@@ -73,7 +78,7 @@ final class EditorModel {
     }
 
     private func savePreferences() {
-        preferences.save()
+        preferences.save(to: preferencesStore)
     }
 
     /// Size of the full composition (screenshot + padding) in points.

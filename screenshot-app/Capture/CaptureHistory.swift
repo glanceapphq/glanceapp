@@ -57,6 +57,9 @@ final class CaptureHistoryEntry: Identifiable {
         compress(screenshot.image)
     }
 
+    /// Whether the image has been compressed and the full image released.
+    var isCompressed: Bool { pngData != nil }
+
     /// The captured screenshot, decompressed if needed.
     var screenshot: Screenshot? {
         if let image {

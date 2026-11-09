@@ -9,6 +9,14 @@ import AppKit
 enum ScreenshotApp {
     static func main() {
         let app = NSApplication.shared
+
+        // As the host of unit tests, run without the menu bar item and global hot keys,
+        // so tests don't interfere with a copy of the app that's already running.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            app.run()
+            return
+        }
+
         let delegate = AppDelegate()
         // `NSApplication.delegate` is weak; keep the delegate alive for the run loop's lifetime.
         app.delegate = delegate

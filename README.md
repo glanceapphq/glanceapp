@@ -185,7 +185,11 @@ screenshot-app/
 ├── Editor/      Editor window, canvas (zoom/pan), composition, annotations
 ├── Services/    Capture, render, export, permissions, hot keys, launch at login
 └── Settings/    Settings window and shortcut recorder
+
+GlanceTests/     XCTest unit tests (⌘U)
 ```
+
+**Tests:** press **⌘U** in Xcode or run `xcodebuild test -scheme screenshot-app -destination 'platform=macOS'`. They cover annotation editing and resizing, undo, text editing, selection snapping and cropping, rendering and pixelation, hot keys, preferences and capture history. Tests run inside the app as their host, which skips the menu bar item and global hot keys, and use throwaway defaults suites, so they never touch your settings.
 
 Design notes:
 
@@ -196,4 +200,4 @@ Design notes:
 
 ## Roadmap
 
-- [ ] Unit tests (XCTest target)
+- [ ] Area selection across multiple displays
