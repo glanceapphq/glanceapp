@@ -167,7 +167,7 @@ private struct EditorToolbar: View {
                 Button("Save", action: actions.save)
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("s", modifiers: .command)
-                    .help("Save as PNG to \(SaveLocation.current.title) (⌘S)")
+                    .help("Save as PNG to \(SaveFolder().title) (⌘S)")
             }
             .controlSize(.small)
         }

@@ -13,7 +13,9 @@ struct SettingsView: View {
     let permissions: PermissionService
     let shortcutActions: ShortcutActions
 
-    @AppStorage(SaveLocation.defaultsKey) private var saveLocation: SaveLocation = .desktop
+    /// Observed so the folder shown updates when it changes.
+    @AppStorage(SaveFolder.bookmarkKey) private var saveFolderBookmark: Data?
+    @State private var saveFolderError: String?
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var launchAtLoginNeedsApproval = LaunchAtLogin.requiresApproval
     @State private var launchAtLoginError: String?
@@ -41,11 +43,38 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Export") {
-                Picker("Save screenshots to", selection: $saveLocation) {
-                    ForEach(SaveLocation.allCases) { location in
-                        Text(location.title).tag(location)
+            Section {
+                LabeledContent("Save screenshots to") {
+                    HStack(spacing: 8) {
+                        let folder = SaveFolder()
+                        Label {
+                            Text(folder.title)
+                        } icon: {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: folder.folder.path(percentEncoded: false)))
+                                .resizable()
+                                .frame(width: 16, height: 16)
+                        }
+
+                        Button("Choose…", action: chooseSaveFolder)
+
+                        if saveFolderBookmark != nil {
+                            Button {
+                                SaveFolder().reset()
+                                saveFolderError = nil
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Save to Downloads")
+                        }
                     }
+                }
+            } header: {
+                Text("Export")
+            } footer: {
+                if let saveFolderError {
+                    Text(saveFolderError)
+                        .foregroundStyle(.red)
                 }
             }
 
@@ -115,6 +144,25 @@ struct SettingsView: View {
                 launchAtLoginNeedsApproval = LaunchAtLogin.requiresApproval
                 try? await Task.sleep(for: .seconds(1))
             }
+        }
+    }
+
+    private func chooseSaveFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose where Glance saves screenshots."
+        panel.directoryURL = SaveFolder().customFolder ?? .desktopDirectory
+
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        do {
+            try SaveFolder().choose(folder)
+            saveFolderError = nil
+        } catch {
+            saveFolderError = error.localizedDescription
         }
     }
 
