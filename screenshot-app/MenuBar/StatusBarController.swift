@@ -1,4 +1,5 @@
 import AppKit
+import Security
 
 /// Owns the menu bar icon and its menu.
 final class StatusBarController: NSObject, NSMenuDelegate {
@@ -73,7 +74,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(settings)
 
         // The App Store updates its copies itself, and doesn't allow pointing elsewhere for updates.
-        if !Self.isFromAppStore {
+        if Self.isDirectDownload {
             let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
             updates.target = self
             menu.addItem(updates)
@@ -134,11 +135,23 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         onCapture(mode)
     }
 
-    /// Copies from the App Store (and TestFlight) carry a receipt in the bundle; direct downloads don't.
-    private static var isFromAppStore: Bool {
-        let receipts = Bundle.main.bundleURL.appending(path: "Contents/_MASReceipt", directoryHint: .isDirectory)
-        return FileManager.default.fileExists(atPath: receipts.path(percentEncoded: false))
-    }
+    /// Whether this copy was downloaded directly, so it has to look for updates itself.
+    /// App Store and TestFlight copies are re-signed by Apple, so they never show the menu item,
+    /// not even during App Review. Debug builds show it, to keep it testable.
+    private static let isDirectDownload: Bool = {
+        #if DEBUG
+        return true
+        #else
+        // Matches a leaf certificate with the Developer ID Application extension.
+        let developerID = "anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+        var code: SecCode?
+        var requirement: SecRequirement?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
+              SecRequirementCreateWithString(developerID as CFString, [], &requirement) == errSecSuccess, let requirement
+        else { return false }
+        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+        #endif
+    }()
 
     @objc private func checkForUpdates() {
         NSWorkspace.shared.open(Self.releasesURL)

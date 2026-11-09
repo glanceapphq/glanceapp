@@ -217,6 +217,12 @@ xcrun notarytool store-credentials glance-notary --apple-id <Apple ID> --team-id
 
 Bump **Version** / **Build** in the target settings before each release. `--skip-notarize` makes a quick local DMG that other Macs won't open.
 
+### Releasing to the App Store
+
+`scripts/upload-app-store.sh` archives the app and uploads it to App Store Connect, signed for the Mac App Store. `--export` makes a signed `.pkg` locally instead. The same sandboxed build serves both channels: **Check for Updates…** appears only in Developer ID builds, because Apple re-signs App Store and TestFlight copies.
+
+Store texts, review notes and the privacy answers are in [`app-store/metadata.md`](app-store/metadata.md); the privacy policy is at https://glancemac.com/privacy.
+
 ## Roadmap
 
 - [ ] Selections spanning more than one display
