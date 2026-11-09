@@ -2,6 +2,9 @@ import AppKit
 
 /// Owns the menu bar icon and its menu.
 final class StatusBarController: NSObject, NSMenuDelegate {
+    /// Where direct-download (DMG) users get new versions.
+    private static let releasesURL = URL(string: "https://github.com/glanceapphq/glanceapp/releases")!
+
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onCapture: (CaptureMode) -> Void
     private let recentCaptures: () -> [CaptureHistoryEntry]
@@ -72,6 +75,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         settings.target = self
         menu.addItem(settings)
 
+        // The App Store updates its copies itself, and doesn't allow pointing elsewhere for updates.
+        if !Self.isFromAppStore {
+            let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+            updates.target = self
+            menu.addItem(updates)
+        }
+
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: "Quit Glance", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -125,6 +135,16 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     @objc private func captureSelected(_ sender: NSMenuItem) {
         guard let mode = CaptureMode(rawValue: UInt32(sender.tag)) else { return }
         onCapture(mode)
+    }
+
+    /// Copies from the App Store (and TestFlight) carry a receipt in the bundle; direct downloads don't.
+    private static var isFromAppStore: Bool {
+        let receipts = Bundle.main.bundleURL.appending(path: "Contents/_MASReceipt", directoryHint: .isDirectory)
+        return FileManager.default.fileExists(atPath: receipts.path(percentEncoded: false))
+    }
+
+    @objc private func checkForUpdates() {
+        NSWorkspace.shared.open(Self.releasesURL)
     }
 
     @objc private func openSettings() {
