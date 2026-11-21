@@ -12,9 +12,9 @@ Have an idea or want to vote? 👍 an issue, or start a thread in [Discussions �
 
 ## Now — v1.1 "Ready to post"
 
-- [ ] Canvas aspect ratio presets: Auto, 16:9, 1:1, 4:5, 9:16
-- [ ] Open any image in the editor: file, drag & drop, clipboard
-- [ ] Drag the finished image out of the editor into any app
+- [ ] Canvas aspect ratio presets: Auto, 16:9, 1:1, 4:5, 9:16 — [#1](https://github.com/glanceapphq/glanceapp/issues/1)
+- [ ] Open any image in the editor: file, drag & drop, clipboard — [#2](https://github.com/glanceapphq/glanceapp/issues/2)
+- [ ] Drag the finished image out of the editor into any app — [#3](https://github.com/glanceapphq/glanceapp/issues/3)
 
 ## Next
 
