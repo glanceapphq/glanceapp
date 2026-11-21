@@ -225,4 +225,4 @@ Store texts, review notes and the privacy answers are in [`app-store/metadata.md
 
 ## Roadmap
 
-- [ ] Selections spanning more than one display
+See [ROADMAP.md](ROADMAP.md) for what's in progress and what's next. Ideas and votes are welcome in [Discussions](https://github.com/glanceapphq/glanceapp/discussions).
