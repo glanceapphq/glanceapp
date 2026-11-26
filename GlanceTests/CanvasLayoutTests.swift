@@ -62,6 +62,25 @@ final class CanvasLayoutTests: XCTestCase {
         XCTAssertGreaterThan(model.screenshotOrigin.y, model.padding)
     }
 
+    func testChangingRatioFitsTheCanvasWithoutUpscaling() {
+        let model = EditorModel.blank(store: makeIsolatedDefaults())
+        let initial = model.zoomToFitRequest
+
+        model.aspectRatio = .story
+        XCTAssertEqual(model.zoomToFitRequest.id, initial.id + 1)
+        XCTAssertFalse(model.zoomToFitRequest.allowsUpscaling, "small captures stay at 100%")
+
+        model.aspectRatio = .story
+        XCTAssertEqual(model.zoomToFitRequest.id, initial.id + 1, "same ratio: no refit")
+
+        model.padding = 100
+        XCTAssertEqual(model.zoomToFitRequest.id, initial.id + 1, "padding doesn't refit")
+
+        model.zoomToFit()
+        XCTAssertEqual(model.zoomToFitRequest.id, initial.id + 2)
+        XCTAssertTrue(model.zoomToFitRequest.allowsUpscaling, "⌘0 still fills the window")
+    }
+
     func testDrawingSelectingAndMovingHaveNoOffsetAtEveryRatio() {
         for ratio in CanvasAspectRatio.allCases {
             let model = EditorModel.blank(store: makeIsolatedDefaults())

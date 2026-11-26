@@ -79,7 +79,7 @@
 
 - **Pinch to zoom**, two-finger scroll to pan — native trackpad gestures.
 - **⌘+ / ⌘−** to zoom, **⌘0** to fit, **⌘1** for actual size (10%–800%).
-- Large captures open fitted to the window; small ones at 100%.
+- Large captures open fitted to the window; small ones at 100%. Changing the aspect ratio fits the canvas again the same way.
 
 ### Share it
 

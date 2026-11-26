@@ -14,7 +14,14 @@ final class EditorModel {
     var cornerRadius: CGFloat { didSet { savePreferences() } }
     var background: CanvasBackground { didSet { savePreferences() } }
     var annotationColor: AnnotationColor { didSet { savePreferences() } }
-    var aspectRatio: CanvasAspectRatio { didSet { savePreferences() } }
+    var aspectRatio: CanvasAspectRatio {
+        didSet {
+            savePreferences()
+            // The canvas can change size a lot (9:16 is much taller), so fit it again
+            // the way a new screenshot opens: large canvases shrink, small ones stay at 100%.
+            if aspectRatio != oldValue { requestZoomToFit(allowsUpscaling: false) }
+        }
+    }
 
     var activeTool: EditorTool? = .arrow
 
@@ -40,8 +47,8 @@ final class EditorModel {
 
     /// Canvas magnification; `1` shows the screenshot at its native point size.
     var zoom: CGFloat = 1
-    /// Incremented to ask the canvas to fit itself into the visible area.
-    private(set) var zoomToFitRequest = 0
+    /// Asks the canvas to fit itself into the visible area whenever it changes.
+    private(set) var zoomToFitRequest = ZoomToFitRequest(id: 0, allowsUpscaling: false)
 
     /// - Parameters:
     ///   - document: Earlier edits to restore, e.g. when reopening from history;
@@ -390,12 +397,16 @@ final class EditorModel {
     func zoomIn() { setZoom(zoom * 1.25) }
     func zoomOut() { setZoom(zoom / 1.25) }
     func zoomToActualSize() { setZoom(1) }
-    func zoomToFit() { zoomToFitRequest += 1 }
+    func zoomToFit() { requestZoomToFit(allowsUpscaling: true) }
 
     /// Canvas points → screenshot points (annotations are stored relative to the screenshot).
     private func toScreenshotSpace(_ point: CGPoint) -> CGPoint {
         let origin = screenshotOrigin
         return CGPoint(x: point.x - origin.x, y: point.y - origin.y)
+    }
+
+    private func requestZoomToFit(allowsUpscaling: Bool) {
+        zoomToFitRequest = ZoomToFitRequest(id: zoomToFitRequest.id + 1, allowsUpscaling: allowsUpscaling)
     }
 
     private func setZoom(_ value: CGFloat) {
@@ -407,6 +418,15 @@ final class EditorModel {
 struct EditorDocument {
     var annotations: [Annotation]
     var preferences: EditorPreferences
+}
+
+/// A request for the canvas to fit itself into the visible area.
+struct ZoomToFitRequest: Equatable {
+    /// Grows with each request, so asking twice in a row still triggers a second fit.
+    let id: Int
+    /// Whether small canvases may be zoomed past 100%: yes for Zoom to Fit (⌘0),
+    /// no for automatic fits, so small captures stay at actual size.
+    let allowsUpscaling: Bool
 }
 
 /// Dragging an existing annotation: moving it, or resizing it by one of its handles.
