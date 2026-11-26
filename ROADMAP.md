@@ -34,6 +34,10 @@ Have an idea or want to vote? üëç an issue, or start a thread in [Discussions ‚
 - [ ] Pin a screenshot on top of all windows
 - [ ] Style presets you can save and reuse, with an optional watermark
 
+**For developers**
+- [ ] Code snippets: paste code, get a beautiful image with syntax highlighting, themes and a window frame
+- [ ] Turn code from any screenshot into a clean snippet (on-device OCR)
+
 ## Later
 
 - [ ] Scrolling capture for long pages
