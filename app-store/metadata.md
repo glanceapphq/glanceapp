@@ -43,6 +43,7 @@ PIXEL-PERFECT SELECTION
 
 PRESENTATION-READY IN ONE STEP
 • Hand-picked gradient backgrounds, plain white or transparent
+• Aspect ratio presets for social posts: 16:9, 1:1, 4:5 and 9:16, so feeds never crop your image
 • Adjustable padding and corner radius
 • Your style is remembered for the next screenshot
 
@@ -69,9 +70,9 @@ Words already in the name and subtitle are indexed on their own, so they aren't 
 
 screen capture,markup,annotate,snip,snipping,screen grab,arrow,highlight,pixelate,blur,clipboard
 
-## What's New (first version)
+## What's New (1.1)
 
-First release of Glance on the Mac App Store.
+Ready to post: pick an aspect ratio in the editor (16:9, 1:1, 4:5 or 9:16) and your screenshot fits X, LinkedIn, Instagram or stories without being cropped. The screenshot stays centred, and your choice is remembered for the next capture.
 
 ## App Review Information
 

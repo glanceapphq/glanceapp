@@ -12,7 +12,6 @@ Have an idea or want to vote? 👍 an issue, or start a thread in [Discussions �
 
 ## Now — "Ready to post"
 
-- [ ] Canvas aspect ratio presets: Auto, 16:9, 1:1, 4:5, 9:16 — [#1](https://github.com/glanceapphq/glanceapp/issues/1)
 - [ ] Open any image in the editor: file, drag & drop, clipboard — [#2](https://github.com/glanceapphq/glanceapp/issues/2)
 - [ ] Drag the finished image out of the editor into any app — [#3](https://github.com/glanceapphq/glanceapp/issues/3)
 
@@ -49,6 +48,7 @@ Have an idea or want to vote? 👍 an issue, or start a thread in [Discussions �
 
 ## Shipped
 
+- **1.1** — Canvas aspect ratio presets: Auto, 16:9, 1:1, 4:5, 9:16
 - **1.0** — Area, window and full-screen capture · frozen screen with loupe and snapping · gradient backgrounds, padding, corners and shadow · arrows, boxes, text, counters and pixelation · copy & save · Recent Captures · custom shortcuts · open at login
 
 ---
