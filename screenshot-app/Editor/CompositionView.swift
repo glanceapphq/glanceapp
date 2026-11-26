@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The final image: background, padding, the screenshot with rounded corners and a soft shadow, and annotations.
+/// The final image: background, padding (plus any extra space for the aspect ratio), the screenshot with rounded corners and a soft shadow, and annotations.
 ///
 /// Drawn at 1 point = 1 screenshot point. The editor shows it inside a zoomable
 /// scroll view, and export renders the very same view, so what you see is what you get.
@@ -10,6 +10,7 @@ struct CompositionView: View {
     var body: some View {
         let screenshot = model.screenshot
         let pixelatedRects = model.pixelatedRects
+        let layout = model.layout
 
         Image(decorative: screenshot.image, scale: screenshot.scale)
             .overlay {
@@ -21,8 +22,11 @@ struct CompositionView: View {
             // Flatten first: `.shadow` otherwise shadows each layer separately, including the pixelation overlay.
             .compositingGroup()
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-            .padding(model.padding)
-            .frame(width: model.canvasSize.width, height: model.canvasSize.height)
+            // Place the screenshot at its origin rather than padding it equally on all sides:
+            // with an aspect ratio, the extra background makes the margins uneven.
+            .padding(.leading, layout.screenshotOrigin.x)
+            .padding(.top, layout.screenshotOrigin.y)
+            .frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
             .background {
                 if let style = model.background.style {
                     Rectangle().fill(style)
@@ -31,7 +35,7 @@ struct CompositionView: View {
             .overlay {
                 AnnotationLayer(
                     annotations: model.visibleAnnotations,
-                    origin: CGPoint(x: model.padding, y: model.padding)
+                    origin: layout.screenshotOrigin
                 )
             }
             .clipped()

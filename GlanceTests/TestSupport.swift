@@ -57,7 +57,7 @@ struct CanvasDriver {
 
     /// Screenshot space → canvas space.
     func canvas(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: point.x + model.padding, y: point.y + model.padding)
+        CGPoint(x: point.x + model.screenshotOrigin.x, y: point.y + model.screenshotOrigin.y)
     }
 
     func drag(from start: CGPoint, to end: CGPoint, shift: Bool = false) {

@@ -6,6 +6,7 @@ struct EditorPreferences: Equatable {
     var cornerRadius: CGFloat = 8
     var background: CanvasBackground = .violet
     var annotationColor: AnnotationColor = .red
+    var aspectRatio: CanvasAspectRatio = .auto
 
     static let defaults = EditorPreferences()
 
@@ -14,6 +15,7 @@ struct EditorPreferences: Equatable {
         static let cornerRadius = "editor.cornerRadius"
         static let background = "editor.background"
         static let annotationColor = "editor.annotationColor"
+        static let aspectRatio = "editor.aspectRatio"
     }
 
     /// Reads saved preferences, falling back to defaults for missing or invalid values.
@@ -31,6 +33,9 @@ struct EditorPreferences: Equatable {
         if let color = store.string(forKey: Key.annotationColor).flatMap(AnnotationColor.init) {
             preferences.annotationColor = color
         }
+        if let aspectRatio = store.string(forKey: Key.aspectRatio).flatMap(CanvasAspectRatio.init) {
+            preferences.aspectRatio = aspectRatio
+        }
         return preferences
     }
 
@@ -39,6 +44,7 @@ struct EditorPreferences: Equatable {
         store.set(Double(cornerRadius), forKey: Key.cornerRadius)
         store.set(background.rawValue, forKey: Key.background)
         store.set(annotationColor.rawValue, forKey: Key.annotationColor)
+        store.set(aspectRatio.rawValue, forKey: Key.aspectRatio)
     }
 }
 

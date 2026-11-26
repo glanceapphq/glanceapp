@@ -35,7 +35,7 @@ struct CanvasCursorRect: Equatable {
 struct CanvasScrollView<Content: View>: NSViewRepresentable {
     let canvasSize: CGSize
     @Binding var zoom: CGFloat
-    let zoomToFitRequest: Int
+    let zoomToFitRequest: ZoomToFitRequest
     /// Cursor over the canvas while a tool is active; `nil` lets the mouse pass through.
     let cursor: NSCursor?
     /// Areas that override `cursor`, e.g. resize handles.
@@ -103,7 +103,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
         if zoomToFitRequest != coordinator.zoomToFitRequest {
             coordinator.zoomToFitRequest = zoomToFitRequest
-            coordinator.zoomToFit(allowUpscaling: true)
+            coordinator.zoomToFit(allowUpscaling: zoomToFitRequest.allowsUpscaling)
         } else if abs(scrollView.magnification - zoom) > 0.001 {
             coordinator.setMagnification(zoom)
         }
@@ -115,7 +115,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var zoom: Binding<CGFloat>
-        var zoomToFitRequest: Int
+        var zoomToFitRequest: ZoomToFitRequest
         var hostingView: NSHostingView<Content>?
         var inputView: CanvasInputView?
         var onTextCommit: ((String) -> Void)?
@@ -124,7 +124,7 @@ struct CanvasScrollView<Content: View>: NSViewRepresentable {
         private var textField: NSTextField?
         private var textFieldID: UUID?
 
-        init(zoom: Binding<CGFloat>, zoomToFitRequest: Int) {
+        init(zoom: Binding<CGFloat>, zoomToFitRequest: ZoomToFitRequest) {
             self.zoom = zoom
             self.zoomToFitRequest = zoomToFitRequest
         }

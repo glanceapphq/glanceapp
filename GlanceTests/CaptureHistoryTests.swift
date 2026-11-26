@@ -60,10 +60,12 @@ final class CaptureHistoryTests: XCTestCase {
         let model = EditorModel(screenshot: screenshot, preferencesStore: makeIsolatedDefaults())
         model.addAnnotation(.counter(CounterAnnotation(center: .zero, number: 1, color: .blue)))
         model.background = .mint
+        model.aspectRatio = .portrait
         entry.document = model.document
 
         let reopened = EditorModel(screenshot: screenshot, document: entry.document, preferencesStore: makeIsolatedDefaults())
         XCTAssertEqual(reopened.annotations.count, 1)
         XCTAssertEqual(reopened.background, .mint)
+        XCTAssertEqual(reopened.aspectRatio, .portrait)
     }
 }
