@@ -10,7 +10,8 @@ Glance is a native macOS menu bar screenshot app (Swift 6 strict concurrency, Sw
 
 - `ROADMAP.md` is the public overview (Now / Next / Later). Titles only, one line each; Now items link to their issue. Keep it free of prices, paid tiers, dates and marketing plans: the repository is public.
 - A GitHub issue is the spec for one task: why, what, implementation notes, acceptance criteria. Only the current and next iteration get issues; later ideas stay as one-liners in ROADMAP.md.
-- Each release has a milestone (`v1.1`, `v1.2`, …) grouping its issues.
+- **One issue = one release.** Each feature ships on its own as the next minor version (1.1, 1.2, …), so every release is something to show. Bundle only tiny fixes, or features that make no sense alone.
+- Milestones group issues by theme (e.g. "Ready to post"), not by version.
 - New feature issues follow `.github/ISSUE_TEMPLATE/feature.md`.
 
 ## Working on an issue ("take issue #N")
@@ -21,7 +22,7 @@ Glance is a native macOS menu bar screenshot app (Swift 6 strict concurrency, Sw
 4. Add or update unit tests in `GlanceTests/`. Tests can't run on Linux; if you can't run `xcodebuild test`, say so explicitly.
 5. Update `README.md` (features / shortcuts) for anything user-visible.
 6. Open the PR with `Closes #N` in the description, and tick the issue's acceptance criteria that are met.
-7. When an issue ships, tick it in `ROADMAP.md` (and move the release to "Shipped" once all its items are done).
+7. When an issue ships, remove it from "Now" in `ROADMAP.md` and add a line under "Shipped": `- **1.x** — <feature>`.
 
 ## Conventions
 

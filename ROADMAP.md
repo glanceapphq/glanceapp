@@ -2,7 +2,7 @@
 
 What's coming to Glance, built in small public iterations. Follow along on X with **#buildinpublic**.
 
-- **Now** — in progress for the next release. Each item links to a GitHub issue with the full spec.
+- **Now** — being built right now. Each item links to a GitHub issue with the full spec and ships in its own release as soon as it's ready.
 - **Next** — planned for the following releases, roughly in order.
 - **Later** — bigger ideas, no promises on timing.
 
@@ -10,7 +10,7 @@ Have an idea or want to vote? 👍 an issue, or start a thread in [Discussions �
 
 ---
 
-## Now — v1.1 "Ready to post"
+## Now — "Ready to post"
 
 - [ ] Canvas aspect ratio presets: Auto, 16:9, 1:1, 4:5, 9:16 — [#1](https://github.com/glanceapphq/glanceapp/issues/1)
 - [ ] Open any image in the editor: file, drag & drop, clipboard — [#2](https://github.com/glanceapphq/glanceapp/issues/2)
