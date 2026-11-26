@@ -14,6 +14,7 @@ final class EditorModel {
     var cornerRadius: CGFloat { didSet { savePreferences() } }
     var background: CanvasBackground { didSet { savePreferences() } }
     var annotationColor: AnnotationColor { didSet { savePreferences() } }
+    var aspectRatio: CanvasAspectRatio { didSet { savePreferences() } }
 
     var activeTool: EditorTool? = .arrow
 
@@ -54,6 +55,7 @@ final class EditorModel {
         self.cornerRadius = preferences.cornerRadius
         self.background = preferences.background
         self.annotationColor = preferences.annotationColor
+        self.aspectRatio = preferences.aspectRatio
         self.annotations = document?.annotations ?? []
     }
 
@@ -63,7 +65,13 @@ final class EditorModel {
     }
 
     var preferences: EditorPreferences {
-        EditorPreferences(padding: padding, cornerRadius: cornerRadius, background: background, annotationColor: annotationColor)
+        EditorPreferences(
+            padding: padding,
+            cornerRadius: cornerRadius,
+            background: background,
+            annotationColor: annotationColor,
+            aspectRatio: aspectRatio
+        )
     }
 
     var hasDefaultStyle: Bool { preferences == .defaults }
@@ -75,19 +83,24 @@ final class EditorModel {
         cornerRadius = defaults.cornerRadius
         background = defaults.background
         annotationColor = defaults.annotationColor
+        aspectRatio = defaults.aspectRatio
     }
 
     private func savePreferences() {
         preferences.save(to: preferencesStore)
     }
 
-    /// Size of the full composition (screenshot + padding) in points.
-    var canvasSize: CGSize {
-        CGSize(
-            width: screenshot.size.width + padding * 2,
-            height: screenshot.size.height + padding * 2
-        )
+    /// Canvas size and screenshot position for the current padding and aspect ratio.
+    var layout: CanvasLayout {
+        CanvasLayout(screenshotSize: screenshot.size, padding: padding, aspectRatio: aspectRatio, scale: screenshot.scale)
     }
+
+    /// Size of the full composition (screenshot, padding and any extra background for the aspect ratio) in points.
+    var canvasSize: CGSize { layout.size }
+
+    /// Top-left corner of the screenshot on the canvas. Use it, not `padding`, to convert between
+    /// canvas and screenshot space: with an aspect ratio the screenshot is offset by more than the padding.
+    var screenshotOrigin: CGPoint { layout.screenshotOrigin }
 
     // MARK: Annotations
 
@@ -119,10 +132,11 @@ final class EditorModel {
 
     /// Where the canvas should show its text field, in canvas space.
     var textFieldRequest: CanvasTextFieldRequest? {
-        textEditing.map {
+        let origin = screenshotOrigin
+        return textEditing.map {
             CanvasTextFieldRequest(
                 id: $0.id,
-                origin: CGPoint(x: $0.origin.x + padding, y: $0.origin.y + padding),
+                origin: CGPoint(x: $0.origin.x + origin.x, y: $0.origin.y + origin.y),
                 text: $0.text,
                 fontSize: $0.fontSize
             )
@@ -380,7 +394,8 @@ final class EditorModel {
 
     /// Canvas points → screenshot points (annotations are stored relative to the screenshot).
     private func toScreenshotSpace(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: point.x - padding, y: point.y - padding)
+        let origin = screenshotOrigin
+        return CGPoint(x: point.x - origin.x, y: point.y - origin.y)
     }
 
     private func setZoom(_ value: CGFloat) {

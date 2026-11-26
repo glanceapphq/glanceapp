@@ -54,9 +54,10 @@ struct EditorView: View {
     /// Resize cursors over the selected annotation's handles, in canvas space.
     private var handleCursorRects: [CanvasCursorRect] {
         let size = 14 / max(model.zoom, 0.01)
+        let origin = model.screenshotOrigin
         return model.selectionHandles.map { handle, point in
             CanvasCursorRect(
-                rect: CGRect(x: point.x + model.padding - size / 2, y: point.y + model.padding - size / 2, width: size, height: size),
+                rect: CGRect(x: point.x + origin.x - size / 2, y: point.y + origin.y - size / 2, width: size, height: size),
                 cursor: handle.cursor
             )
         }
@@ -224,9 +225,10 @@ private struct SelectionFrame: View {
         // Keep line weights and handle sizes constant on screen at any zoom.
         let scale = 1 / max(model.zoom, 0.01)
         let handleSize = 8 * scale
+        let origin = model.screenshotOrigin
 
         ZStack(alignment: .topLeading) {
-            if let frame = model.selectionFrame?.offsetBy(dx: model.padding, dy: model.padding) {
+            if let frame = model.selectionFrame?.offsetBy(dx: origin.x, dy: origin.y) {
                 Rectangle()
                     .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.5 * scale, dash: [4 * scale, 3 * scale]))
                     .frame(width: frame.width, height: frame.height)
@@ -239,7 +241,7 @@ private struct SelectionFrame: View {
                     .stroke(Color.accentColor, lineWidth: 1.5 * scale)
                     .shadow(color: .black.opacity(0.25), radius: scale)
                     .frame(width: handleSize, height: handleSize)
-                    .offset(x: handle.point.x + model.padding - handleSize / 2, y: handle.point.y + model.padding - handleSize / 2)
+                    .offset(x: handle.point.x + origin.x - handleSize / 2, y: handle.point.y + origin.y - handleSize / 2)
             }
         }
         .allowsHitTesting(false)
@@ -302,6 +304,18 @@ private struct EditorInspector: View {
                 }
             }
 
+            InspectorSection("Aspect") {
+                Picker("Aspect", selection: $model.aspectRatio) {
+                    ForEach(CanvasAspectRatio.allCases) { ratio in
+                        Text(ratio.title).tag(ratio)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .help("Shape of the exported image: Auto, 16:9 (X, LinkedIn, YouTube), 1:1, 4:5 (portrait posts) or 9:16 (stories)")
+            }
+
             InspectorSection("Padding") {
                 SliderRow(value: $model.padding, range: EditorModel.paddingRange)
             }
@@ -315,7 +329,7 @@ private struct EditorInspector: View {
             Button("Reset to Defaults", action: model.resetStyle)
                 .controlSize(.small)
                 .disabled(model.hasDefaultStyle)
-                .help("Restore default background, padding, corner radius and arrow color")
+                .help("Restore default background, aspect, padding, corner radius and arrow color")
         }
         .padding(16)
     }

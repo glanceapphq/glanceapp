@@ -15,7 +15,7 @@
 - ⚡️ **Instant capture** — area, window or full screen from a global shortcut
 - 🧊 **Frozen screen** — menus, tooltips and hover states stay put while you select
 - 🔍 **Pixel-perfect selection** — magnifier loupe, crosshair and snapping to window edges
-- 🎨 **Presentation-ready in one step** — gradient backgrounds, padding, rounded corners and a soft shadow
+- 🎨 **Presentation-ready in one step** — gradient backgrounds, aspect ratio presets for social posts, padding, rounded corners and a soft shadow
 - ✏️ **Markup tools** — arrows, boxes, text, numbered steps and pixelation for sensitive data
 - 📋 **Copy or save** — Retina-resolution PNG to the clipboard, Downloads or any folder you choose
 - 🕘 **Recent captures** — reopen any of your last 10 screenshots, annotations included
@@ -50,9 +50,10 @@
 **From raw grab to polished image — automatically.**
 
 - **Background presets** — 6 hand-picked gradients (Violet, Sky, Mint, Peach, Rose, Midnight), plain white, or transparent.
+- **Aspect ratio presets** — Auto, 16:9 (X, LinkedIn, YouTube), 1:1, 4:5 (portrait posts) or 9:16 (stories), so feeds never crop your image. The screenshot stays centred and the background fills the extra space.
 - **Adjustable padding** (0–160 pt) and **rounded corners** (0–32 pt).
 - **Soft drop shadow** that makes the screenshot float above the background.
-- **Remembers your style** — your background, padding, corners and colour carry over to the next screenshot. One click resets to defaults.
+- **Remembers your style** — your background, aspect ratio, padding, corners and colour carry over to the next screenshot. One click resets to defaults.
 - **What you see is what you export** — the editor and the exported image are rendered by the same view, pixel for pixel.
 
 ### Mark it up
@@ -194,12 +195,12 @@ screenshot-app/
 GlanceTests/     XCTest unit tests (⌘U)
 ```
 
-**Tests:** press **⌘U** in Xcode or run `xcodebuild test -scheme screenshot-app -destination 'platform=macOS'`. They cover annotation editing and resizing, undo, text editing, selection snapping and cropping, rendering and pixelation, hot keys, preferences and capture history. Tests run inside the app as their host, which skips the menu bar item and global hot keys, and use throwaway defaults suites, so they never touch your settings.
+**Tests:** press **⌘U** in Xcode or run `xcodebuild test -scheme screenshot-app -destination 'platform=macOS'`. They cover annotation editing and resizing, undo, text editing, selection snapping and cropping, canvas layout per aspect ratio, rendering and pixelation, hot keys, preferences and capture history. Tests run inside the app as their host, which skips the menu bar item and global hot keys, and use throwaway defaults suites, so they never touch your settings.
 
 Design notes:
 
 - **One view for screen and export** — `CompositionView` is shown in the editor and rendered by `ImageRenderer` for export, so output always matches the editor.
-- **Annotations live in screenshot coordinates**, so they stay attached to content when padding changes.
+- **Annotations live in screenshot coordinates**, so they stay attached to content when padding or the aspect ratio changes. Convert with `EditorModel.screenshotOrigin` (computed by `CanvasLayout`), never with `padding`: with an aspect ratio the screenshot sits further in than the padding.
 - **Canvas input is handled in AppKit** (`CanvasInputView`), because SwiftUI gestures report wrong locations inside a magnified `NSScrollView`.
 - **Global hot keys use Carbon `RegisterEventHotKey`**: no Accessibility permission needed, and the key press isn't leaked to the frontmost app.
 
