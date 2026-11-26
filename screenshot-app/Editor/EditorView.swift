@@ -305,15 +305,7 @@ private struct EditorInspector: View {
             }
 
             InspectorSection("Aspect") {
-                Picker("Aspect", selection: $model.aspectRatio) {
-                    ForEach(CanvasAspectRatio.allCases) { ratio in
-                        Text(ratio.title).tag(ratio)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .help("Shape of the exported image: Auto, 16:9 (X, LinkedIn, YouTube), 1:1, 4:5 (portrait posts) or 9:16 (stories)")
+                AspectRatioPicker(selection: $model.aspectRatio)
             }
 
             InspectorSection("Padding") {
@@ -365,6 +357,50 @@ private struct SliderRow: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(width: 28, alignment: .trailing)
+        }
+    }
+}
+
+/// Equal-width buttons for the aspect ratio presets.
+///
+/// Not a segmented `Picker`: an `NSSegmentedControl` sizes itself to its labels and
+/// can't shrink five segments into the inspector, so it overflowed the trailing padding.
+private struct AspectRatioPicker: View {
+    @Binding var selection: CanvasAspectRatio
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(CanvasAspectRatio.allCases) { ratio in
+                let isSelected = selection == ratio
+                Button {
+                    selection = ratio
+                } label: {
+                    Text(ratio.title)
+                        .font(.caption.weight(isSelected ? .semibold : .regular))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: 22)
+                        .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                        .background(isSelected ? Color.accentColor.opacity(0.18) : .clear, in: .rect(cornerRadius: 5))
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help(ratio.help)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(.quaternary, in: .rect(cornerRadius: 7))
+    }
+}
+
+private extension CanvasAspectRatio {
+    var help: String {
+        switch self {
+        case .auto: "Screenshot and padding only"
+        case .widescreen: "16:9 for X, LinkedIn and YouTube"
+        case .square: "1:1 for square posts"
+        case .portrait: "4:5 for portrait posts"
+        case .story: "9:16 for stories"
         }
     }
 }
