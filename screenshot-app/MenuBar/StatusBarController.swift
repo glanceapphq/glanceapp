@@ -2,27 +2,38 @@ import AppKit
 import Security
 
 /// Owns the menu bar icon and its menu.
-final class StatusBarController: NSObject, NSMenuDelegate {
+final class StatusBarController: NSObject, NSMenuDelegate, NSMenuItemValidation {
     /// Where direct-download (DMG) users get new versions.
     private static let releasesURL = URL(string: "https://github.com/glanceapphq/glanceapp/releases")!
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onCapture: (CaptureMode) -> Void
+    private let onOpenImage: () -> Void
+    private let onOpenFromClipboard: () -> Void
+    private let onDropImages: ([URL]) -> Void
     private let recentCaptures: () -> [CaptureHistoryEntry]
     private let onOpenRecent: (UUID) -> Void
     private let onClearRecent: () -> Void
     private let onOpenSettings: () -> Void
     private var captureItems: [CaptureMode: NSMenuItem] = [:]
+    private var clipboardItem: NSMenuItem?
+    private var dropTarget: StatusItemDropTarget?
     private let recentMenu = NSMenu(title: "Recent Captures")
 
     init(
         onCapture: @escaping (CaptureMode) -> Void,
+        onOpenImage: @escaping () -> Void,
+        onOpenFromClipboard: @escaping () -> Void,
+        onDropImages: @escaping ([URL]) -> Void,
         recentCaptures: @escaping () -> [CaptureHistoryEntry],
         onOpenRecent: @escaping (UUID) -> Void,
         onClearRecent: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void
     ) {
         self.onCapture = onCapture
+        self.onOpenImage = onOpenImage
+        self.onOpenFromClipboard = onOpenFromClipboard
+        self.onDropImages = onDropImages
         self.recentCaptures = recentCaptures
         self.onOpenRecent = onOpenRecent
         self.onClearRecent = onClearRecent
@@ -31,6 +42,9 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         statusItem.button?.image = MenuBarIcon.make()
         statusItem.menu = makeMenu()
+        if let button = statusItem.button {
+            dropTarget = StatusItemDropTarget(button: button) { [weak self] urls in self?.onDropImages(urls) }
+        }
     }
 
     isolated deinit {
@@ -61,6 +75,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let open = NSMenuItem(title: "Open Image…", action: #selector(openImage), keyEquivalent: "o")
+        open.target = self
+        menu.addItem(open)
+
+        // Enabled only when there's an image to paste, see `validateMenuItem(_:)`.
+        let clipboard = NSMenuItem(title: "Open from Clipboard", action: #selector(openFromClipboard), keyEquivalent: "")
+        clipboard.target = self
+        menu.addItem(clipboard)
+        clipboardItem = clipboard
+
+        menu.addItem(.separator())
+
         // Filled in by `menuNeedsUpdate(_:)` each time it opens.
         recentMenu.delegate = self
         let recent = NSMenuItem(title: "Recent Captures", action: nil, keyEquivalent: "")
@@ -85,6 +111,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Quit Glance", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         return menu
+    }
+
+    /// Called by the menu each time it opens, for every item that targets this object.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem === clipboardItem else { return true }
+        return ImageImportService.canReadImage(from: .general)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -128,6 +160,14 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func clearRecent() {
         onClearRecent()
+    }
+
+    @objc private func openImage() {
+        onOpenImage()
+    }
+
+    @objc private func openFromClipboard() {
+        onOpenFromClipboard()
     }
 
     @objc private func captureSelected(_ sender: NSMenuItem) {

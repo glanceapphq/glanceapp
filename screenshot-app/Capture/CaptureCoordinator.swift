@@ -5,11 +5,13 @@ import OSLog
 ///
 /// Gates requests behind the permission check, drives the selection overlay and
 /// opens each result in its own editor window. Captures are recorded in `history`
-/// and can be reopened from it.
+/// and can be reopened from it. Existing images (files, clipboard) take the same path
+/// once loaded, so they behave exactly like captures.
 final class CaptureCoordinator {
     private let permissions: PermissionService
     private let history: CaptureHistory
     private let captureService = CaptureService()
+    private let importService = ImageImportService()
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "screenshot-app", category: "Capture")
 
     private var selection: SelectionOverlayController?
@@ -68,7 +70,48 @@ final class CaptureCoordinator {
         openEditor(for: entry, screenshot: screenshot, on: NSScreen.underMouse)
     }
 
+    // MARK: - Opening images
+
+    /// Lets the user pick image files; each opens in its own editor.
+    func openImageFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = ImageImportService.supportedTypes
+        panel.allowsMultipleSelection = true
+        // A menu bar app isn't active by default, and the panel would open behind other windows.
+        NSApp.activate()
+        guard panel.runModal() == .OK else { return }
+        openImages(at: panel.urls)
+    }
+
+    /// Opens image files, e.g. dropped on the menu bar icon.
+    func openImages(at urls: [URL]) {
+        for url in urls {
+            openImage { try self.importService.screenshot(contentsOf: url) }
+        }
+    }
+
+    func openImageFromClipboard() {
+        openImage { try self.importService.screenshot(from: .general) }
+    }
+
+    /// Opens an image in an editor and records it in Recent Captures, exactly like a capture.
+    func open(_ screenshot: Screenshot, on screen: NSScreen? = NSScreen.underMouse) {
+        openEditor(for: history.add(screenshot), screenshot: screenshot, on: screen)
+    }
+
     // MARK: - Private
+
+    private func openImage(_ load: () throws -> Screenshot) {
+        guard !isBusy else { return }
+        do {
+            let screenshot = try load()
+            logger.info("Opened \(screenshot.image.width)×\(screenshot.image.height) px at \(screenshot.scale)x")
+            open(screenshot)
+        } catch {
+            logger.error("Opening an image failed: \(error.localizedDescription)")
+            presentError(error, title: "Couldn’t open the image")
+        }
+    }
 
     private func beginSelection(on screens: [SelectionScreen]) {
         let selection = SelectionOverlayController()
@@ -103,7 +146,7 @@ final class CaptureCoordinator {
             let screenshot = try await capture()
             logger.info("Captured \(screenshot.image.width)×\(screenshot.image.height) px")
             endCapture()
-            openEditor(for: history.add(screenshot), screenshot: screenshot, on: screen)
+            open(screenshot, on: screen)
         } catch {
             fail(with: error)
         }
@@ -112,7 +155,7 @@ final class CaptureCoordinator {
     private func fail(with error: Error) {
         logger.error("Capture failed: \(error.localizedDescription)")
         endCapture()
-        presentError(error)
+        presentError(error, title: "Screenshot Failed")
     }
 
     private func endCapture() {
@@ -134,9 +177,9 @@ final class CaptureCoordinator {
         editor.show(on: screen)
     }
 
-    private func presentError(_ error: Error) {
+    private func presentError(_ error: Error, title: String) {
         let alert = NSAlert(error: error)
-        alert.messageText = "Screenshot Failed"
+        alert.messageText = title
         alert.informativeText = error.localizedDescription
         NSApp.activate()
         alert.runModal()
