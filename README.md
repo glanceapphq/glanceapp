@@ -13,6 +13,7 @@
 ## Highlights
 
 - ⚡️ **Instant capture** — area, window or full screen from a global shortcut
+- 🖼️ **Any image, not just captures** — open a file, paste from the clipboard or drop an image on the menu bar icon
 - 🧊 **Frozen screen** — menus, tooltips and hover states stay put while you select
 - 🔍 **Pixel-perfect selection** — magnifier loupe, crosshair and snapping to window edges
 - 🎨 **Presentation-ready in one step** — gradient backgrounds, aspect ratio presets for social posts, padding, rounded corners and a soft shadow
@@ -34,6 +35,16 @@
 - **Full-screen capture (⇧⌘2)** — the whole display under your pointer, in one keystroke.
 - **Multiple displays** — every display is frozen and selectable at once; the editor opens on the display you captured.
 - **Works from anywhere** — it lives in the menu bar, with no Dock icon and no windows in your way.
+
+### Bring any image
+
+**Beautify screenshots you already have — an old capture, a design export, something a colleague sent.**
+
+- **Open Image… (⌘O in the menu)** — pick one or more PNG, JPEG, HEIC, TIFF, GIF (first frame) or WebP files.
+- **Open from Clipboard** — opens the image you copied in any app, or an image file copied in Finder. Enabled only when there's an image to paste.
+- **Drag & drop** — drop image files onto the menu bar icon.
+- **Same size as on screen** — Retina images (144 DPI), including the ones Glance exports, open at their real on-screen size; photos are shown the right way up.
+- **Just like a capture** — the same editor, your remembered style, and a place in Recent Captures.
 
 ### Selection that respects your pixels
 
@@ -123,6 +134,14 @@
 
 Both can be changed in **Settings → Shortcuts**.
 
+### In the menu bar menu
+
+| Shortcut | Action |
+|---|---|
+| ⌘O | Open Image… |
+| ⌘, | Settings… |
+| ⌘Q | Quit Glance |
+
 ### While selecting
 
 | Key | Action |
@@ -174,7 +193,7 @@ Both can be changed in **Settings → Shortcuts**.
 
 ## Privacy
 
-Glance works entirely offline. Screenshots exist only in memory (including Recent Captures, which is cleared when you quit), on your clipboard, or in the folder you save them to. Nothing is collected, uploaded or shared. It runs in the macOS App Sandbox: the only access it has is Screen Recording (to capture), your Downloads folder, and the save folder you pick yourself.
+Glance works entirely offline. Screenshots exist only in memory (including Recent Captures, which is cleared when you quit), on your clipboard, or in the folder you save them to. Nothing is collected, uploaded or shared. It runs in the macOS App Sandbox: the only access it has is Screen Recording (to capture), your Downloads folder, the save folder you pick yourself, and the images you choose to open.
 
 ---
 
@@ -195,7 +214,7 @@ screenshot-app/
 GlanceTests/     XCTest unit tests (⌘U)
 ```
 
-**Tests:** press **⌘U** in Xcode or run `xcodebuild test -scheme screenshot-app -destination 'platform=macOS'`. They cover annotation editing and resizing, undo, text editing, selection snapping and cropping, canvas layout per aspect ratio, rendering and pixelation, hot keys, preferences and capture history. Tests run inside the app as their host, which skips the menu bar item and global hot keys, and use throwaway defaults suites, so they never touch your settings.
+**Tests:** press **⌘U** in Xcode or run `xcodebuild test -scheme screenshot-app -destination 'platform=macOS'`. They cover annotation editing and resizing, undo, text editing, selection snapping and cropping, canvas layout per aspect ratio, rendering and pixelation, opening images (DPI, orientation, clipboard), hot keys, preferences and capture history. Tests run inside the app as their host, which skips the menu bar item and global hot keys, and use throwaway defaults suites, so they never touch your settings.
 
 Design notes:
 

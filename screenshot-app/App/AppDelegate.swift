@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusBar = StatusBarController(
             onCapture: { [weak self] mode in self?.capture(mode) },
+            onOpenImage: { [weak self] in self?.captureCoordinator.openImageFile() },
+            onOpenFromClipboard: { [weak self] in self?.captureCoordinator.openImageFromClipboard() },
+            onDropImages: { [weak self] urls in self?.captureCoordinator.openImages(at: urls) },
             recentCaptures: { [weak self] in self?.history.entries ?? [] },
             onOpenRecent: { [weak self] id in self?.captureCoordinator.reopen(id) },
             onClearRecent: { [weak self] in self?.history.removeAll() },
